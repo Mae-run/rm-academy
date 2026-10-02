@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>OpenCV 专题 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="cvp">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "cvp",
+  title: "RM 视觉 · OpenCV 专题",
+  badge: "VISION",
+  crumb: "OpenCV · 从像素到装甲板",
+  lead: "RM 视觉组的主战场是 <b>RM 视觉·装甲板识别</b>，这门课是它和深度学习之间的心脏：<b>图像处理功底</b>。不管用传统法还是深度学习，<b>预处理、轮廓、几何变换、相机标定</b>全是 OpenCV 的活。深度学习的速度再快，预处理烂了一样翻车。每一章代码都要亲手敲，跑通了再翻页。",
+  prev: { href: "rm-vision.html", label: "RM 视觉" },
+  next: { href: "rm-dl.html", label: "YOLO 深度学习" },
+
+  stages: [
+    { id: "stage-cv-1", title: "第一阶段 · 像素与图像", chapters: [
+      { id: "cv-pixel", title: "第 1 章 像素：图像就是矩阵", blocks: [
+        H.sub("一张图 = 一个三维数组"),
+        H.p("别被「图像」这个词骗了。在内存里，一张 1920×1080 的彩色图就是一个 <code class='inline'>[1080, 1920, 3]</code> 的 uint8 数组。像素值 0~255。这一章之前你用的是眼睛看图，这一章之后你要用<b>矩阵</b>看图。"),
+        H.code("python", "pixel.py", `import cv2
+import numpy as np
+
+img = cv2.imread("armor.jpg")          # BGR 三通道（注意：OpenCV 默认 BGR 不是 RGB！）
+print(img.shape)                        # (高, 宽, 通道数)
+print(img.dtype)                        # uint8
+
+# 取一个像素
+b, g, r = img[100, 200]                 # 第 100 行第 200 列
+print(f"B={b} G={g} R={r}")
+
+# 改一个像素
+img[100, 200] = (255, 255, 255)         # 涂白`),
+        H.note("master", "师父警告", "OpenCV 默认 <code class='inline'>BGR</code> 顺序！从图片读到显示全链路是 BGR，但如果你把图喂给深度学习框架或 matplotlib 显示，要先 <code class='inline'>cv2.cvtColor(img, cv2.COLOR_BGR2RGB)</code>。十个人里有八个在这个坑上翻过车——颜色对调，红变蓝。"),
+        H.quiz({
+          q: "img = cv2.imread 读出 640×480 的彩色图，img.shape 返回什么？",
+          tag: "随堂测",
+          opts: ["(640, 480, 3)", "(480, 640, 3)", "(3, 640, 480)", "(640, 480)"],
+          ans: 1,
+          explain: "OpenCV 的 shape 是 (行, 列, 通道)。行在前——是图像处理的习惯，不是 NumPy 常见的 (C,H,W)。"
+        }),
+        H.prac({
+          id: "cvp-p1", level: 1, title: "手写：像素统计",
+          body: "读入一张图，统计红色通道中像素值 > 200 的像素个数，打印占整幅图的百分比。不许用 cv2.countNonZero，手写循环。",
+          hint: "img[:,:,2] 是 R 通道；sum 遍历比较；百分比要 float。",
+          solution: H.code("python", "answer.py", `import cv2
+
+img = cv2.imread("armor.jpg")
+red = img[:, :, 2]           # R 通道
+
+total = red.size             # 总像素数
+hot = 0
+for row in range(red.shape[0]):
+    for col in range(red.shape[1]):
+        if red[row, col] > 200:
+            hot += 1
+
+print(f"高红像素: {hot}/{total} ({hot/total*100:.2f}%)")`)
+        }),
+      ]},
+      { id: "cv-roi", title: "第 2 章 ROI 与通道：切西瓜的艺术", blocks: [
+        H.sub("ROI：只关心画面的一小块"),
+        H.p("RM 相机 60fps，视觉流水线每帧只有 16ms 预算。<b>全图处理是最奢侈的浪费</b>——裁剪出感兴趣区域（ROI）再处理，速度立省十倍。"),
+        H.code("python", "roi.py", `import cv2
+
+img = cv2.imread("field.jpg")
+
+# 切出画面中央 400×300 的区域
+h, w = img.shape[:2]
+cx, cy = w // 2, h // 2
+roi = img[cy-150:cy+150, cx-200:cx+200]       # [行范围, 列范围]
+
+cv2.imshow("ROI", roi)
+
+# 把 ROI 变蓝（BGR 通道切片）
+roi[:, :, 0] = 255    # B 通道全拉满
+roi[:, :, 1] = 0
+roi[:, :, 2] = 0
+
+cv2.imshow("Modified", img)
+cv2.waitKey(0)`),
+        H.note("master", "师父经验", "RM 里裁剪 ROI 的经典场景：<b>装甲板上一帧在哪，这一帧就在它附近找</b>，不重复搜全图。配合上一章的像素操作，能省出 80% 的 CPU 时间给跟踪。"),
+        H.quiz({
+          q: "img[100:200, 300:500] 取出的是什么？",
+          tag: "随堂测",
+          opts: ["第 100~200 列、300~500 行的区域", "第 100~200 行、300~500 列的区域", "宽 100~200、高 300~500 的矩形", "红色通道的第 100~200 个像素"],
+          ans: 1,
+          explain: "NumPy 切片永远是 [行, 列]，对应图像的 [y, x]。[100:200, 300:500] 就是 y 从 100 到 200，x 从 300 到 500。"
+        }),
+        H.prac({
+          id: "cvp-p2", level: 1, title: "手写：通道分离与灰度",
+          body: "读入一张彩色图，分别显示 B、G、R 三个单通道灰度图（三个窗口并排），再用 cv2.cvtColor 转一张真正的灰度图。对比四张图的观感差异。",
+          hint: "img[:,:,i] 取单通道；cvtColor 用 COLOR_BGR2GRAY；注意单通道灰度和公式灰度不是一回事。",
+          solution: H.code("python", "answer.py", `import cv2
+
+img = cv2.imread("armor.jpg")
+
+b, g, r = cv2.split(img)
+cv2.imshow("B channel", b)
+cv2.imshow("G channel", g)
+cv2.imshow("R channel", r)
+
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+cv2.imshow("Real Gray", gray)
+cv2.waitKey(0)`)
+        }),
+      ]},
+      { id: "cv-color", title: "第 3 章 色彩空间：BGR / HSV / 灰度", blocks: [
+        H.sub("为什么要 HSV"),
+        H.p("BGR 三个通道和「颜色」的直觉对不上——暗红和亮红在 BGR 里数值差得远。HSV 把颜色拆成<b>色相 H、饱和度 S、明度 V</b>，红色永远是 H≈0 或 H≈180（OpenCV 里 H 范围 0~180），光照变化只影响 V。这就是为什么 RM 红色/蓝色装甲板识别全用 HSV 二值化。"),
+        H.code("python", "hsv.py", `import cv2
+import numpy as np
+
+img = cv2.imread("armor.jpg")
+hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+# 红色在 HSV 里是两端（H≈0 和 H≈180），要两段都抠
+lower1 = np.array([0,   100, 100])
+upper1 = np.array([10,  255, 255])
+lower2 = np.array([160, 100, 100])
+upper2 = np.array([180, 255, 255])
+
+mask1 = cv2.inRange(hsv, lower1, upper1)
+mask2 = cv2.inRange(hsv, lower2, upper2)
+mask  = mask1 | mask2
+
+cv2.imshow("Mask", mask)
+cv2.waitKey(0)`),
+        H.table("三种色彩空间对比", ["空间", "适用场景", "RM 里的用法"], [
+          ["BGR", "通用读写显示", "相机原始数据、imshow"],
+          ["HSV", "颜色分割", "装甲板灯条二值化（核心）"],
+          ["灰度", "形状分析", "轮廓、边缘、特征点"]
+        ]),
+        H.quiz({
+          q: "用 HSV 抠红色时为什么需要两个范围（H≈0~10 和 H≈160~180）？",
+          tag: "随堂测",
+          opts: ["一个范围覆盖不了那么多像素", "色相环是圆的，红色在两端", "OpenCV 的 bug", "为了兼容暗红和亮红"],
+          ans: 1,
+          explain: "HSV 的 H 是色相环（0°~360° 映射到 0~180）。红色恰好在 0° 和 360° 两端，物理上是同一个颜色，数值上在头尾。所以必须取两段并集。"
+        }),
+        H.prac({
+          id: "cvp-p3", level: 2, title: "手写：红蓝双色二值化",
+          body: "读入比赛场地图（红蓝双方装甲板混在一起），用 HSV 分别抠出红色灯条和蓝色灯条，生成两张二值图，再用不同颜色显示在同一个窗口（红色区域涂红、蓝色涂蓝）。",
+          hint: "蓝色 H 约 100~130；用 bitwise_or 合并两张 mask；用 zeros_like 建空白彩色图。",
+          solution: H.code("python", "answer.py", `import cv2
+import numpy as np
+
+img = cv2.imread("field.jpg")
+hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+red_mask = cv2.inRange(hsv, np.array([0,100,100]), np.array([10,255,255])) | \
+           cv2.inRange(hsv, np.array([160,100,100]), np.array([180,255,255]))
+blue_mask = cv2.inRange(hsv, np.array([100,100,100]), np.array([130,255,255]))
+
+out = np.zeros_like(img)
+out[red_mask > 0]  = (0, 0, 255)      # 红
+out[blue_mask > 0] = (255, 0, 0)      # 蓝
+
+cv2.imshow("Red & Blue", out)
+cv2.waitKey(0)`)
+        }),
+      ]},
+      { id: "cv-thresh", title: "第 4 章 二值化与自适应阈值", blocks: [
+        H.sub("固定阈值 vs 自适应阈值"),
+        H.p("固定阈值 <code class='inline'>cv2.threshold(img, 127, 255, ...)</code> 在光照均匀时够用，但 RM 现场灯光杂——顶灯、侧灯、反光灯条亮度不一。<b>自适应阈值 cv2.adaptiveThreshold</b> 按局部邻域算阈值，光照不匀也能抠干净。"),
+        H.code("python", "thresh.py", `import cv2
+
+img = cv2.imread("field.jpg", cv2.IMREAD_GRAYSCALE)
+
+# 固定阈值（简单但怕光照不均）
+_, fixed = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+
+# 自适应阈值（邻域均值法）
+adaptive = cv2.adaptiveThreshold(img, 255,
+    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,      # 高斯加权邻域
+    cv2.THRESH_BINARY,
+    11, 2)                               # 邻域大小 11，常数偏移 2
+
+cv2.imshow("Fixed", fixed)
+cv2.imshow("Adaptive", adaptive)
+cv2.waitKey(0)`),
+        H.note("pitfall", "常见坑", "adaptiveThreshold 只能处理<b>单通道灰度图</b>。直接喂彩色图会报错或得到花屏。永远先 <code class='inline'>cvtColor</code> 转灰度。"),
+        H.quiz({
+          q: "光照不均的现场，抠灯条应该用哪种二值化？",
+          tag: "随堂测",
+          opts: ["固定阈值 cv2.threshold", "自适应阈值 cv2.adaptiveThreshold", "直接拿原图用", "先调相机曝光再用固定阈值"],
+          ans: 1,
+          explain: "光照不均时全局阈值必然顾此失彼，自适应阈值按局部区域动态计算。当然最好的办法是光源均匀 + 固定阈值（最稳定），但 RM 现场做不到，只能上自适应。"
+        }),
+        H.prac({
+          id: "cvp-p4", level: 2, title: "手写：光照鲁棒二值化",
+          body: "构造一张左侧亮、右侧暗的灰度测试图（自己生成渐变光照），分别用固定阈值和自适应阈值处理，对比两者在暗区的表现差异。保存对比图。",
+          hint: "np.linspace 生成渐变；加在原图上模拟光照；imwrite 保存。",
+          solution: H.code("python", "answer.py", `import cv2
+import numpy as np
+
+# 生成渐变光照图：左亮右暗
+img = np.tile(np.linspace(200, 30, 640, dtype=np.uint8), (480, 1))
+# 中央画一个白色矩形（模拟灯条）
+cv2.rectangle(img, (270, 190), (370, 290), 255, -1)
+
+_, fixed = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+adap = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                             cv2.THRESH_BINARY, 15, 3)
+
+combined = np.hstack([img, fixed, adap])
+cv2.imwrite("thresh_compare.png", combined)
+cv2.imshow("Original | Fixed | Adaptive", combined)
+cv2.waitKey(0)`)
+        }),
+      ]},
+    ]},
+
+    { id: "stage-cv-2", title: "第二阶段 · 形态学与轮廓", chapters: [
+      { id: "cv-morph", title: "第 5 章 形态学：膨胀、腐蚀、开闭运算", blocks: [
+        H.sub("噪声清理的扳手"),
+        H.p("二值化之后图里全是噪点——孤立的亮点、断开的边缘、细小的毛刺。<b>形态学操作就是清理这些的二值扳手</b>。"),
+        H.table("四种核心操作", ["操作", "效果", "用途"], [
+          ["腐蚀 erode", "白色区域缩小", "去小噪点"],
+          ["膨胀 dilate", "白色区域扩大", "连接断开的区域"],
+          ["开运算 = 先腐蚀后膨胀", "去噪保持主体", "清理噪点不破坏灯条"],
+          ["闭运算 = 先膨胀后腐蚀", "填小洞", "连接灯条两端"]
+        ]),
+        H.code("python", "morph.py", `import cv2
+import numpy as np
+
+img = cv2.imread("noisy.png", cv2.IMREAD_GRAYSCALE)
+_, binary = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+
+kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))   # 5×5 矩形核
+
+# 开运算：去噪
+opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+
+# 闭运算：补洞
+closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
+
+cv2.imshow("Original", binary)
+cv2.imshow("Opened", opened)
+cv2.imshow("Closed", closed)
+cv2.waitKey(0)`),
+        H.note("master", "师父经验", "核大小有讲究：<b>3×3 去细噪，5×5 通用，7×7 小心把灯条吃掉</b>。在 RM 里，装甲板灯条宽度一般 10~30 像素，核别超过灯条宽度的一半。"),
+        H.prac({
+          id: "cvp-p5", level: 2, title: "手写：灯条清理流水线",
+          body: "读入一张有大量噪点的装甲板二值图，用形态学操作把孤立的噪点清掉、把断开的灯条连起来，输出清理后的图。要求：原图噪点完全消失，灯条形状不被破坏。",
+          hint: "先开运算去噪，再闭运算补缝；核从 3×3 试起，不行再加。",
+          solution: H.code("python", "answer.py", `import cv2
+import numpy as np
+
+img = cv2.imread("armor_noisy.png", cv2.IMREAD_GRAYSCALE)
+_, binary = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+
+k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+k5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+
+opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, k3)      # 去噪
+closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, k5)     # 补缝
+
+cv2.imshow("Cleaned", closed)
+cv2.waitKey(0)`)
+        }),
+      ]},
+      { id: "cv-contour", title: "第 6 章 轮廓：从像素到形状", blocks: [
+        H.sub("轮廓：把一团像素变成一个形状"),
+        H.p("二值图里白色的连通区域就是「轮廓」。<code class='inline'>cv2.findContours</code> 把每个连通区域找出来，给你一串边界点坐标——<b>这是从像素世界跨入形状世界的桥梁</b>。"),
+        H.code("python", "contour.py", `import cv2
+
+img = cv2.imread("field.jpg")
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+_, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+
+contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+print(f"找到 {len(contours)} 个轮廓")
+
+# 遍历每个轮廓
+for i, cnt in enumerate(contours):
+    area = cv2.contourArea(cnt)                    # 面积
+    perimeter = cv2.arcLength(cnt, True)           # 周长
+    x, y, w, h = cv2.boundingRect(cnt)             # 外接矩形
+    aspect = w / h if h > 0 else 0                 # 宽高比
+
+    print(f"轮廓{i}: 面积={area:.0f}, 宽高比={aspect:.2f}, 位置=({x},{y})")
+
+# 画出来
+cv2.drawContours(img, contours, -1, (0, 255, 0), 2)
+cv2.imshow("Contours", img)
+cv2.waitKey(0)`),
+        H.note("master", "筛选装甲板的三板斧", "RM 传统法筛装甲板就靠三招：<b>①面积范围（太大太小都扔）②宽高比（灯条是竖长条，w/h ≈ 0.3~0.6）③长宽绝对值（距离估计）</b>。三关过下来，基本只剩真装甲板。"),
+        H.quiz({
+          q: "筛选装甲板灯条时，最重要的几何特征是什么？",
+          tag: "随堂测",
+          opts: ["轮廓的颜色", "面积 + 宽高比 + 绝对尺寸", "轮廓的中心点", "轮廓的周长"],
+          ans: 1,
+          explain: "灯条是竖长条：面积在合理范围、宽高比约 0.3~0.6、长度和距离相关。这三招组合起来能从噪点里把真灯条捞出来。"
+        }),
+        H.prac({
+          id: "cvp-p6", level: 3, title: "手写：装甲板灯条筛选器",
+          body: "读入一张含多个目标的场地图，完成完整筛选流水线：二值化 → 形态学清理 → 找轮廓 → 按面积/宽高比/尺寸三条件筛选 → 把通过的轮廓用绿色框标出。输出筛选前后轮廓数量对比。",
+          hint: "面积 100~5000 像素，宽高比 0.2~0.7，w 和 h 都 > 10。",
+          solution: H.code("python", "answer.py", `import cv2
+
+img = cv2.imread("field.jpg")
+hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+mask = cv2.inRange(hsv, (0,100,100), (10,255,255)) | \
+       cv2.inRange(hsv, (160,100,100), (180,255,255))
+
+kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+print(f"筛选前: {len(contours)} 个轮廓")
+
+armor_bars = []
+for cnt in contours:
+    area = cv2.contourArea(cnt)
+    if not (100 < area < 5000): continue
+    x, y, w, h = cv2.boundingRect(cnt)
+    if not (0.2 < w/h < 0.7): continue
+    if w < 10 or h < 10: continue
+    armor_bars.append((x, y, w, h))
+
+print(f"筛选后: {len(armor_bars)} 个灯条")
+for x, y, w, h in armor_bars:
+    cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+cv2.imshow("Armor Bars", img)
+cv2.waitKey(0)`)
+        }),
+      ]},
+      { id: "cv-geo", title: "第 7 章 几何变换：旋转、缩放、透视", blocks: [
+        H.sub("为什么要几何变换"),
+        H.p("RM 相机装在云台上，会跟着炮管转。图像也跟着旋转、拉伸。几何变换就是把图像<b>摆正、对齐、校正</b>的数学工具。"),
+        H.code("python", "warp.py", `import cv2
+import numpy as np
+
+img = cv2.imread("armor.jpg")
+h, w = img.shape[:2]
+
+# 1. 旋转 30 度（围绕图像中心）
+M = cv2.getRotationMatrix2D((w/2, h/2), 30, 1.0)
+rotated = cv2.warpAffine(img, M, (w, h))
+
+# 2. 透视变换：把斜着的装甲板拉正
+pts_src = np.float32([[100,100], [300,80], [320,280], [80,300]])   # 原图四点
+pts_dst = np.float32([[0,0],     [200,0],  [200,200], [0,200]])     # 目标矩形
+M2 = cv2.getPerspectiveTransform(pts_src, pts_dst)
+warped = cv2.warpPerspective(img, M2, (200, 200))
+
+cv2.imshow("Rotated", rotated)
+cv2.imshow("Warped", warped)
+cv2.waitKey(0)`),
+        H.note("master", "RM 实战用法", "透视变换的杀手锏：<b>把斜着拍的装甲板拉成正视角</b>，再送进分类器判断数字（1/2/3/4/5）。不正视角的识别准确率差很多。"),
+        H.prac({
+          id: "cvp-p7", level: 3, title: "手写：装甲板透视校正",
+          body: "读入一张斜着拍摄的装甲板图，手动标出装甲板四个角点的像素坐标，用透视变换把它拉成 200×200 的正视角矩形，保存校正结果。",
+          hint: "cv2.getPerspectiveTransform + warpPerspective；四点顺序要一致（左上、右上、右下、左下）。",
+          solution: H.code("python", "answer.py", `import cv2
+import numpy as np
+
+img = cv2.imread("armor_tilted.jpg")
+
+# 手动标的四个角点（左上、右上、右下、左下）
+src = np.float32([[120, 80], [310, 95], [325, 280], [95, 260]])
+dst = np.float32([[0, 0],    [200, 0],  [200, 200], [0, 200]])
+
+M = cv2.getPerspectiveTransform(src, dst)
+corrected = cv2.warpPerspective(img, M, (200, 200))
+
+cv2.imwrite("armor_corrected.png", corrected)
+cv2.imshow("Corrected", corrected)
+cv2.waitKey(0)`)
+        }),
+      ]},
+      { id: "cv-feature", title: "第 8 章 特征点与匹配", blocks: [
+        H.sub("特征点：图像的指纹"),
+        H.p("RM 能量机关的视觉跟踪不能只看颜色——转速快、光照变，颜色特征会失效。特征点（SIFT/ORB）是图像的「指纹」：<b>旋转、缩放、亮度变化都不怕</b>。"),
+        H.code("python", "feature.py", `import cv2
+
+img1 = cv2.imread("rune_1.jpg", cv2.IMREAD_GRAYSCALE)   # 上一帧
+img2 = cv2.imread("rune_2.jpg", cv2.IMREAD_GRAYSCALE)   # 这一帧
+
+orb = cv2.ORB_create(nfeatures=500)
+
+kp1, des1 = orb.detectAndCompute(img1, None)
+kp2, des2 = orb.detectAndCompute(img2, None)
+
+# 暴力匹配
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+matches = bf.match(des1, des2)
+matches = sorted(matches, key=lambda x: x.distance)
+
+print(f"特征点: {len(kp1)} vs {len(kp2)}, 匹配数: {len(matches)}")
+
+# 画前 50 个最佳匹配
+result = cv2.drawMatches(img1, kp1, img2, kp2, matches[:50], None,
+                          flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
+cv2.imshow("Matches", result)
+cv2.waitKey(0)`),
+        H.note("master", "ORB vs SIFT", "SIFT 精度高但慢；ORB 快且免费（SIFT 有专利）。RM 比赛用 ORB 足够，60fps 预算内跑得动。如果追求极致精度用 SIFT，但要开 GPU 版。"),
+        H.prac({
+          id: "cvp-p8", level: 3, title: "手写：能量机关帧间跟踪",
+          body: "读入能量机关连续两帧图，用 ORB 提取特征点、暴力匹配，筛选距离 < 50 的优质匹配，用 RANSAC 估计单应性矩阵，画出跟踪框。",
+          hint: "cv2.findHomography 用 RANSAC；用匹配点算变换矩阵后把上一帧的中心点映射到当前帧。",
+          solution: H.code("python", "answer.py", `import cv2
+import numpy as np
+
+img1 = cv2.imread("rune_1.jpg", cv2.IMREAD_GRAYSCALE)
+img2 = cv2.imread("rune_2.jpg", cv2.IMREAD_GRAYSCALE)
+
+orb = cv2.ORB_create(nfeatures=1000)
+kp1, des1 = orb.detectAndCompute(img1, None)
+kp2, des2 = orb.detectAndCompute(img2, None)
+
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+matches = bf.match(des1, des2)
+good = [m for m in matches if m.distance < 50]
+
+print(f"优质匹配: {len(good)}/{len(matches)}")
+
+if len(good) >= 4:
+    src_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+    dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+    H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+
+    h, w = img1.shape
+    corners = np.float32([[0,0],[w,0],[w,h],[0,h]]).reshape(-1,1,2)
+    tracked = cv2.perspectiveTransform(corners, H)
+
+    img2_color = cv2.cvtColor(img2, cv2.COLOR_GRAY2BGR)
+    cv2.polylines(img2_color, [np.int32(tracked)], True, (0,255,0), 3)
+    cv2.imshow("Tracked", img2_color)
+    cv2.waitKey(0)`)
+        }),
+      ]},
+    ]},
+
+    { id: "stage-cv-3", title: "第三阶段 · 视频与相机", chapters: [
+      { id: "cv-video", title: "第 9 章 视频流处理管线", blocks: [
+        H.sub("RM 视觉不是处理一张图，是处理一条流"),
+        H.p("60fps 意味着每帧预算 16.7ms。你的代码必须像流水线一样：<b>读帧 → 预处理 → 识别 → 输出 → 释放</b>，任何一步卡住就丢帧。"),
+        H.code("python", "pipeline.py", `import cv2
+import time
+
+cap = cv2.VideoCapture(0)                    # 0 = 默认相机
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap.set(cv2.CAP_PROP_FPS, 60)
+
+while True:
+    t0 = time.time()
+
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # 流水线：预处理 → 识别
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, (0,100,100), (10,255,255))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for cnt in contours:
+        if cv2.contourArea(cnt) > 500:
+            x, y, w, h = cv2.boundingRect(cnt)
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+    # 计算帧率
+    fps = 1.0 / (time.time() - t0)
+    cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+    cv2.imshow("Pipeline", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()`),
+        H.note("master", "性能预算", "每帧 16ms 的分配建议：<b>预处理 3ms、识别 8ms、跟踪/滤波 3ms、通信 2ms</b>。超了就优化最慢的那一步。"),
+        H.quiz({
+          q: "60fps 下每帧的处理预算是多少？",
+          tag: "随堂测",
+          opts: ["16.7ms", "33ms", "60ms", "100ms"],
+          ans: 0,
+          explain: "1000ms ÷ 60 = 16.67ms。这是硬预算，超了就掉帧，视觉就卡。"
+        }),
+        H.prac({
+          id: "cvp-p9", level: 2, title: "手写：实时装甲板检测管线",
+          body: "写一个完整的实时管线：读相机 → HSV 二值化 → 形态学清理 → 轮廓筛选 → 框出装甲板 → 显示 FPS。要求稳定跑到 50+ FPS。",
+          hint: "前面几章的代码组合起来；FPS 低就检查是不是 imshow 太多。",
+          solution: H.code("python", "answer.py", `import cv2
+import time
+
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
+kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+
+while True:
+    t0 = time.time()
+    ret, frame = cap.read()
+    if not ret: break
+
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, (0,100,100), (10,255,255)) | \
+           cv2.inRange(hsv, (160,100,100), (180,255,255))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for cnt in contours:
+        if 100 < cv2.contourArea(cnt) < 5000:
+            x, y, w, h = cv2.boundingRect(cnt)
+            if 0.2 < w/h < 0.7:
+                cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+
+    fps = 1.0 / (time.time() - t0)
+    cv2.putText(frame, f"{fps:.0f} FPS", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+
+    cv2.imshow("Armor Pipeline", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+cap.release()
+cv2.destroyAllWindows()`)
+        }),
+      ]},
+      { id: "cv-calib", title: "第 10 章 相机标定与内参", blocks: [
+        H.sub("为什么要标定"),
+        H.p("相机镜头不是理想的针孔——有畸变（边缘弯曲）、有内参（焦距、主点）。<b>不标定就做不了 PnP 解算，打出去的弹丸会偏</b>。标定就是求出这些参数，把真实相机掰回理想模型。"),
+        H.code("python", "calib.py", `import cv2
+import numpy as np
+
+# 棋盘格标定（9×6 内角点）
+pattern_size = (9, 6)
+square_size = 25.0    # mm
+
+# 准备世界坐标系中的角点（Z=0 平面）
+objp = np.zeros((pattern_size[0] * pattern_size[1], 3), np.float32)
+objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2)
+objp *= square_size
+
+objpoints = []    # 世界坐标
+imgpoints = []    # 图像坐标
+
+# 拍 20 张不同角度的棋盘格
+for i in range(20):
+    img = cv2.imread(f"calib_{i:02d}.jpg")
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ret, corners = cv2.findChessboardCorners(gray, pattern_size, None)
+    if ret:
+        objpoints.append(objp)
+        corners_refined = cv2.cornerSubPix(gray, corners, (11,11), (-1,-1),
+            (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001))
+        imgpoints.append(corners_refined)
+
+# 标定
+ret, K, dist, rvecs, tvecs = cv2.calibrateCamera(
+    objpoints, imgpoints, gray.shape[::-1], None, None)
+
+print("内参矩阵 K:")
+print(K)
+print("畸变系数:", dist.ravel())
+
+# 去畸变
+img = cv2.imread("test.jpg")
+undistorted = cv2.undistort(img, K, dist)
+cv2.imwrite("undistorted.jpg", undistorted)`),
+        H.note("master", "标定三板斧", "①棋盘格要拍够 20 张不同角度（俯仰/旋转/远近）②角点要覆盖整个视野，别都挤中间 ③重投影误差 < 0.5 像素才算标定成功。误差大就重拍。"),
+        H.quiz({
+          q: "PnP 解算前必须做相机标定的根本原因是什么？",
+          tag: "随堂测",
+          opts: ["让图像更清晰", "修正镜头畸变和内参，把真实相机掰回理想针孔模型", "提高帧率", "减少噪点"],
+          ans: 1,
+          explain: "真实镜头有畸变（边缘弯曲）和内参误差（焦距不准、主点偏移）。PnP 假设的是理想针孔模型，不标定直接把畸变图喂给 PnP，解算出的距离和角度全错。"
+        }),
+        H.prac({
+          id: "cvp-p10", level: 3, title: "手写：标定与去畸变实战",
+          body: "用手机拍 20 张棋盘格标定板（自己打印 9×6），写代码完成标定，输出内参矩阵和畸变系数。再拿一张有畸变的场地图去畸变，对比前后效果。",
+          hint: "重投影误差用 cv2.calibrateCamera 返回的第一个值；去畸变用 undistort。",
+          solution: H.code("python", "answer.py", `import cv2
+import numpy as np
+
+pattern_size = (9, 6)
+objp = np.zeros((54, 3), np.float32)
+objp[:, :2] = np.mgrid[0:9, 0:6].T.reshape(-1, 2) * 25.0
+
+objpoints, imgpoints = [], []
+
+for i in range(20):
+    img = cv2.imread(f"calib_{i:02d}.jpg")
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    ret, corners = cv2.findChessboardCorners(gray, pattern_size, None)
+    if ret:
+        objpoints.append(objp)
+        imgpoints.append(corners)
+
+ret, K, dist, _, _ = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
+print(f"重投影误差: {ret:.3f} 像素")
+print("K =", K)
+print("dist =", dist.ravel())
+
+img = cv2.imread("distorted.jpg")
+undist = cv2.undistort(img, K, dist)
+cv2.imwrite("undistorted.jpg", undist)`)
+        }),
+      ]},
+    ]},
+  ]
+};
+</script>
+</body>
+</html>

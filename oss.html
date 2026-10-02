@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>开源项目 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+<style>
+  /* ---------- 项目卡 ---------- */
+  .proj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .proj-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; transition: border-color .15s, transform .15s; display: flex; flex-direction: column; gap: 8px; }
+  .proj-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .proj-card .p-top { display: flex; align-items: center; gap: 10px; }
+  .proj-card .p-ico { font-size: 22px; flex: none; }
+  .proj-card .p-name { font-size: 15.5px; font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .proj-card .p-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; flex: none; background: rgba(255,170,0,.15); color: var(--orange); }
+  .proj-card .p-badge.top { background: rgba(80,200,120,.15); color: var(--green); }
+  .proj-card .p-team { font-size: 12px; color: var(--text-faint); }
+  .proj-card .p-desc { font-size: 13px; color: var(--text-dim); line-height: 1.65; flex: 1; }
+  .proj-card .p-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+  .proj-card .p-tag { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--bg-soft); color: var(--text-dim); border: 1px solid var(--border-soft); }
+  .proj-card .p-link { font-size: 12px; color: var(--accent); word-break: break-all; }
+  .proj-card .p-link a { color: var(--accent); }
+  .prac-sec { margin: 18px 0; }
+  .prac-sec .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .prac-sec .filter-bar button {
+    padding: 6px 14px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg-card); color: var(--text-dim);
+  }
+  .prac-sec .filter-bar button.on { background: var(--accent-deep); color: #fff; border-color: var(--accent-deep); }
+</style>
+</head>
+<body data-page="oss">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "oss",
+  title: "开源项目",
+  badge: "OSS",
+  crumb: "RoboMaster · 高质量开源项目地图",
+  lead: "师父淘回来验过货的 <b>13 个高质量 RM 开源项目</b>——按 <b>视觉 / 电控</b> 分两大战线，每条战线再细分方向。不是链接堆，是<b>按学习顺序排好的弹药库</b>：每个项目标了推荐度、对口课程、适合怎么读。先把精读的啃穿，再看扩展的。",
+
+  stages: [
+    /* ================= 视觉 ================= */
+    { id: "oss-vis", title: "视觉战线（7 个）", chapters: [
+      { id: "oss-vis-aim", title: "自瞄视觉（4 个）", blocks: [
+        H.p("自瞄是视觉组的主战场。四个项目按<b>由浅入深</b>排：<b>CVRM2021 打思想底子 → sp_vision_25 精读主力 → rmcs_v2 学工程化 → RCIA 看 ROS2 栈长啥样</b>。"),
+        H.p('<div class="proj-grid">' +
+          projCard("🎯", "sp_vision_25", "top", "同济 SuperPower · 2025",
+            "国赛级完整自瞄工程：YOLO 检测 + EKF 整车估计 + TinyMPC 轨迹规划 + 弹道解算 + 多兵种入口 + 21 个独立测试程序。「轨迹视角下的自瞄理论」出自这里。",
+            ["C++", "OpenVINO", "EKF", "MPC", "27k 行"],
+            "github.com/TongjiSuperPower/sp_vision_25") +
+          projCard("🎯", "rmcs_auto_aim_v2", "top", "南理工 Alliance · 2026",
+            "现代化自瞄工程：组件化架构 + ROS2 + 完整调试链路（Foxglove/串流/录制/回放）。2026 赛季能量机关榜单第一（平均 6.4 环 / 大符 9.7 臂）。",
+            ["C++", "ROS2", "工程化"],
+            "github.com/Alliance-Algorithm/rmcs_auto_aim_v2") +
+          projCard("🎯", "RCIA-Vision-2025", "", "AcmeX-Cosmos",
+            "ROS 2 全栈视觉管线：检测 → PnP/IPPE → Ceres 精化 → 9 状态 EKF → 延迟补偿 → 串口输出。模块边界极清楚，适合当「标准视觉栈分层」教材。",
+            ["C++", "ROS2", "PnP", "EKF"],
+            "github.com/AcmeX-Cosmos/RCIA-Vision-2025") +
+          projCard("🎯", "CVRM2021-sjtu", "", "上海交大 · 2021",
+            "经典必读：四点模型、EKF 推导、时间同步、相机-IMU 外参——原理讲解密度最高的老牌开源。年代早，学思想不学框架。",
+            ["C++", "EKF", "经典"],
+            "github.com/Harry-hhj/CVRM2021-sjtu") +
+        '</div>'),
+      ]},
+      { id: "oss-vis-radar", title: "雷达站（2 个）", blocks: [
+        H.p("RM 里最少被系统学习的战线。雷达站 = <b>相机 + 激光雷达 + 多目标跟踪 + 仿真定位</b>，跟自瞄是两套完全不同的逻辑。"),
+        H.p('<div class="proj-grid">' +
+          projCard("📡", "rm_radar", "top", "哈工大 I-HITCRT",
+            "雷达站全流程开源：点云配准定位 + 相机检测 + 目标跟踪 + 标记稳定性优化。README 给了实测数据（平均标记准确率 83.66%，最高 93.55%）。",
+            ["C++", "ROS", "点云", "跟踪"],
+            "github.com/zmsbruce/rm_radar") +
+          projCard("📡", "RM-Radar-Vision-Framework", "", "hyris188",
+            "雷达视觉框架：YOLO + 部署工程化路线，体量小于 HIT 那套，适合入门后补训练/部署链路参考。",
+            ["YOLO", "部署"],
+            "github.com/hyris188/RM-Radar-Vision-Framework") +
+        '</div>'),
+      ]},
+      { id: "oss-vis-nav", title: "哨兵导航与教程（1+1 个）", blocks: [
+        H.p("哨兵导航 = 视觉战线向<b>决策层</b>的延伸；vision_tutorial 是新人入组前的<b>最短路径</b>。"),
+        H.p('<div class="proj-grid">' +
+          projCard("🧭", "pb2025_sentry_nav", "top", "深北莫北极熊 · 2025",
+            "Nav2 哨兵导航全链路：point_lio 建图 + small_gicp 重定位 + 地形分析 + 仿真/实车/先验点云全套。README 详到「真能搭起来」。",
+            ["ROS2", "Nav2", "SLAM", "点云"],
+            "github.com/SMBU-PolarBear-Robotics-Team/pb2025_sentry_nav") +
+          projCard("📖", "vision_tutorial", "", "NeoZng",
+            "《了解 CV 和 RoboMaster 视觉组》入门手册 + OpenCV 基础 API 练习仓库。还没进组/刚进组的同学，先把这个过一遍。",
+            ["OpenCV", "入门"],
+            "github.com/NeoZng/vision_tutorial") +
+        '</div>'),
+      ]},
+    ]},
+
+    /* ================= 电控 ================= */
+    { id: "oss-emb", title: "电控战线（4 个）", chapters: [
+      { id: "oss-emb-frame", title: "嵌入式框架（2 个）", blocks: [
+        H.p("电控组最大的痛是「祖传 HAL 大杂烩」。这两个框架代表<b>现代嵌入式工程</b>的两条路线：Zephyr RTOS vs 传统 Makefile。"),
+        H.p('<div class="proj-grid">' +
+          projCard("⚙️", "breeze", "top", "深圳大学 RobotPilots",
+            "基于 Zephyr-RTOS 的战队嵌入式开发框架，把电控往现代 RTOS 工作流拉了一步：任务拆分、日志思想、模块化。文档理念是「没日志的诊断 = 闭眼开车」。",
+            ["C", "Zephyr RTOS"],
+            "github.com/RobotPilots-SZU/breeze") +
+          projCard("⚙️", "Embedded-Control", "", "Purdue RM",
+            "普渡 RM 共享控制基座：多机器人复用一套控制代码、电机配置、FreeRTOS + 调试流程。国外队的规范化路子。",
+            ["C++", "FreeRTOS"],
+            "github.com/PurdueRM/Embedded-Control") +
+        '</div>'),
+      ]},
+      { id: "oss-emb-chassis", title: "底盘与电机（2 个）", blocks: [
+        H.p("底盘是电控组练<b>控制理论</b>最好的靶场——特别是舵轮，运动学 + 控制状态机 + 电机接口全都有。"),
+        H.p('<div class="proj-grid">' +
+          projCard("🛞", "Rudder-Swerve-Control", "top", "山东理工齐奇",
+            "舵轮底盘控制专项开源：四舵轮运动学、最短路径转角、最优角、cos³ 轮速补偿、舵向位置环/轮速环。写得像教程，极适合拆案例题。",
+            ["C", "舵轮", "运动学"],
+            "github.com/LYHrmer/Rudder-Swerve-Control") +
+          projCard("🔧", "m3508i", "", "ChenYehuiCN",
+            "DJI M3508I 电机 RS485 协议实现与逆向——想搞懂电机底层通信/传感器协议逆向的专项参考。",
+            ["STM32", "RS485", "逆向"],
+            "github.com/ChenYehuiCN/m3508i") +
+        '</div>'),
+      ]},
+    ]},
+
+    /* ================= 资源合集 ================= */
+    { id: "oss-res", title: "资源合集（2 个）——当地图用，别当教材", chapters: [
+      { id: "oss-res-aw", title: "Awesome 索引", blocks: [
+        H.p("两份 awesome 列表只做一件事：<b>找方向</b>。里面项目质量参差，永远先看维护时间。"),
+        H.p('<div class="proj-grid">' +
+          projCard("🗺️", "awesome-robomaster", "", "robomaster-oss",
+            "RM 及机器人开发开源汇总合集（官方 OSS 组织维护）。",
+            ["索引"],
+            "github.com/robomaster-oss/awesome-robomaster") +
+          projCard("🗺️", "awesome-robomaster", "", "OpenRoboMaster",
+            "社区维护的另一份精选列表，含 RM 相关仿真/工具。",
+            ["索引"],
+            "github.com/OpenRoboMaster/awesome-robomaster") +
+        '</div>'),
+      ]},
+    ]},
+
+    /* ================= 阅读路线 ================= */
+    { id: "oss-route", title: "怎么读：师父排的阅读路线", chapters: [
+      { id: "oss-route-1", title: "按角色的精读顺序", blocks: [
+        H.note("tip", "视觉组新人（前 6 周）",
+          "<b>① vision_tutorial</b> 过一遍 OpenCV 基础 → <b>② OpenCV 专题课</b>（站内）→ <b>③ CVRM2021</b> 读四点模型和 EKF 章节（只学思想）→ <b>④ sp_vision_25</b> 从 tests/ 目录入手精读。"),
+        H.note("tip", "视觉组主力（赛前）",
+          "<b>① sp_vision_25</b> 精读识别器 + 估计器 + 规划器三件套 → <b>② rmcs_auto_aim_v2</b> 对照工程化差异 → <b>③ rm_radar</b> 补雷达视野（哨兵/雷达岗再看 pb2025_sentry_nav）。"),
+        H.note("tip", "电控组",
+          "<b>① Rudder-Swerve-Control</b> 拆运动学案例 → <b>② breeze</b> 学框架思想（不一定用 Zephyr，学它怎么拆模块）→ <b>③ Embedded-Control</b> 看多机复用 → <b>④ m3508i</b> 有电机协议需求再进。"),
+        H.note("pitfall", "三条铁律",
+          "① <b>别整包移植</b>——强队代码绑赛季规则和硬件，搬思路不搬代码；② <b>先跑测试再读码</b>——sp_vision_25 有 21 个独立测试，输入输出看明白了源码就读懂一半；③ <b>对照站内课</b>——YOLO 课对照 yolov8.cpp 推理核心、控制进阶课对照 planner.cpp，两边互相印证才吃得透。"),
+      ]},
+    ]},
+  ],
+};
+
+/* 项目卡渲染（本页内部函数，不进全局 DSL） */
+function projCard(ico, name, cls, team, desc, tags, link) {
+  var tagHtml = tags.map(function (t) { return '<span class="p-tag">' + t + "</span>"; }).join("");
+  var badge = cls === "top" ? '<span class="p-badge top">必读</span>' : '<span class="p-badge">推荐</span>';
+  return '<div class="proj-card">' +
+    '<div class="p-top"><span class="p-ico">' + ico + '</span><span class="p-name">' + name + "</span>" + badge + "</div>" +
+    '<div class="p-team">' + team + "</div>" +
+    '<div class="p-desc">' + desc + "</div>" +
+    '<div class="p-meta">' + tagHtml + "</div>" +
+    '<div class="p-link">📁 ' + link + "</div>" +
+  "</div>";
+}
+</script>
+</body>
+</html>

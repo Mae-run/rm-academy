@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>YOLO 深度学习 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="dlv">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "dlv",
+  title: "RM 视觉 · YOLO 深度学习",
+  badge: "DL",
+  crumb: "YOLO · 从数据集到 TensorRT",
+  lead: "2026 年 RM 赛场的主流打法：<b>YOLO 检测 + ByteTrack 跟踪 + PnP 解算</b>。这门课带你从「神经网络是什么」走到「在 NUC 上跑 200FPS 的 TensorRT 引擎」——数据采集标注、训练调参、导出 ONNX、C++ 部署、能量机关专章，一条龙。传统 OpenCV 法是保底方案，深度学习是上限方案，<b>两手都要硬</b>。",
+  prev: { href: "rm-opencv.html", label: "OpenCV 专题" },
+  next: { href: "rm-vision.html", label: "RM 视觉" },
+
+  stages: [
+    { id: "stage-dlv-1", title: "第一阶段 · 神经网络直觉", chapters: [
+      { id: "dlv-why", title: "第 1 章 为什么深度学习干掉了传统算法", blocks: [
+        H.sub("传统法的天花板"),
+        H.p("传统流水线（HSV 二值化 → 轮廓 → 筛选）在<b>光照可控、装甲板标准姿势</b>下表现不错。但 RM 现场三个杀手让传统法翻车："),
+        H.ul([
+          "<b>光照剧变</b>：场地顶灯、对方激光、LED 屏反光——HSV 阈值全乱",
+          "<b>装甲板姿态</b>：高速小陀螺下装甲板斜到 70°，宽高比筛选直接失效",
+          "<b>遮挡</b>：己方机器人挡住半边装甲板，轮廓断裂"
+        ]),
+        H.p("深度学习的本质区别：<b>它学的是「装甲板长什么样」而不是「装甲板是什么颜色」</b>。光照变了、姿态变了、遮挡了，只要人眼还能认出来，网络大概率也能认出来。"),
+        H.note("master", "师父的判断", "2026 年 RM 强队的配置：<b>YOLO 负责检测「哪有装甲板」，传统几何/PnP 负责「在哪、多远、什么姿态」</b>。深度学习不是替代传统法，是替换传统法里最脆弱的那一环。你两门都得会。"),
+        H.quiz({
+          q: "深度学习相比传统算法最核心的优势是什么？",
+          tag: "随堂测",
+          opts: ["跑得更快", "学特征而不是手工设计规则，对光照/姿态/遮挡鲁棒", "不需要标注数据", "不依赖相机标定"],
+          ans: 1,
+          explain: "速度上 TensorRT 部署的 YOLO 确实快，但核心优势是鲁棒性——传统法在光照/姿态变化时阈值和几何筛选规则全崩，而网络学到的特征对扰动不敏感。"
+        }),
+        H.prac({
+          id: "dlv-p1", level: 1, title: "手写：传统法失败案例分析",
+          body: "找三张让传统 HSV 法失效的图片（逆光、斜姿态、遮挡），分别写出传统流水线会在哪一步翻车（二值化丢失/轮廓断裂/筛选误判），并说明深度学习为什么能处理这种情况。",
+          hint: "从三杀手逐一对照：光照→阈值失效；姿态→宽高比失效；遮挡→轮廓断裂。",
+          solution: H.code("text", "analysis.txt", `案例1 逆光装甲板：
+  传统法：HSV 的 V 通道饱和，inRange 阈值失效，装甲板在 mask 里消失
+  深度学习：网络对亮度扰动鲁棒（训练时做过明暗增广），仍能检出
+
+案例2 高速斜置装甲板（小陀螺）：
+  传统法：宽高比筛选假设竖长条，斜置后 w/h 失效，被筛选器扔掉
+  深度学习：anchor/预测框直接回归旋转目标的包围盒，姿态无关
+
+案例3 半遮挡装甲板：
+  传统法：轮廓断裂成两段，两段都不满足面积阈值，全丢
+  深度学习：卷积感受野看的是全局特征，半遮挡仍然有足够特征响应`)
+        }),
+      ]},
+      { id: "dlv-nn", title: "第 2 章 神经网络十分钟速览", blocks: [
+        H.sub("不用懂数学，先建直觉"),
+        H.p("神经网络就是一台<b>万能函数拟合器</b>：输入图像，输出你要的答案（这里是「框在哪+是什么」）。它由几百万个可调的「旋钮」（权重）组成，训练就是不断调旋钮让输出逼近正确答案。"),
+        H.table("核心概念对照表", ["概念", "直觉理解", "在 YOLO 里的角色"], [
+          ["卷积核", "3×3 的小窗口在图上滑动扫描", "提取局部特征（边缘、角点、纹理）"],
+          ["特征图", "卷积后的输出：这张图哪里有这种特征", "深层特征图 = 装甲板的抽象表示"],
+          ["池化", "把 2×2 区域压缩成 1 个值", "缩小分辨率，扩大感受野"],
+          ["感受野", "一个输出点看得见原图多大范围", "深层感受野大 → 能判断整体是装甲板"],
+          ["损失函数", "错得有多离谱的量化分数", "框偏差 + 分类错误 + 置信度三项加权"],
+          ["梯度下降", "往让错误变小的方向微调所有旋钮", "反向传播迭代更新权重"]
+        ]),
+        H.p("你不需要会推导反向传播——<b>会用、会调、会部署</b>就够了。数学细节等读研再说。"),
+        H.note("master", "师父经验", "调参时的直觉都来自这张表：训练 loss 不降 → 学习率太大（步子迈大跨过谷底）；过拟合（训练好测试差）→ 数据太少或增广不够；框不准 → 锚框不匹配目标尺寸。"),
+        H.quiz({
+          q: "训练时 loss 一直在高位震荡不下降，最可能的原因是？",
+          tag: "随堂测",
+          opts: ["数据太少", "学习率太大", "卷积核太大", "图片太亮"],
+          ans: 1,
+          explain: "loss 震荡不降的典型原因是学习率过大——每步走太远，在谷底两侧来回弹。先除以 10 再试。"
+        }),
+        H.prac({
+          id: "dlv-p2", level: 1, title: "手写：概念自查清单",
+          body: "合上资料，默写六个核心概念（卷积核/特征图/池化/感受野/损失函数/梯度下降）各自的一句话直觉，并各写一个「出问题时对应的现象」。写完对答案。",
+          hint: "对照上面的表逐个回忆；现象往训练曲线上靠。",
+          solution: H.code("text", "selfcheck.txt", `卷积核：滑动小窗口提取局部特征
+  坏了的现象：对微小纹理过敏，误检噪声 → 需要更多增广
+特征图：每个位置的某种特征响应强度图
+  坏了的现象：深层特征图全黑 → 学习率过大，网络死了（Dying ReLU）
+池化：降采样压缩分辨率
+  坏了的现象：小目标丢失 → 池化层太激进或输入分辨率太低
+感受野：一个输出点能看见的原图范围
+  坏了的现象：大目标检出一堆碎片框 → 网络太浅，感受野不够
+损失函数：量化当前错得有多离谱
+  坏了的现象：loss 不降 → lr 不当或标签有错
+梯度下降：按错误方向微调所有权重
+  坏了的现象：梯度爆炸 loss 变 NaN → 梯度裁剪或降 lr`)
+        }),
+      ]},
+    ]},
+
+    { id: "stage-dlv-2", title: "第二阶段 · YOLO 原理与训练", chapters: [
+      { id: "dlv-yolo", title: "第 3 章 YOLO：一图一网络一输出", blocks: [
+        H.sub("YOLO 的核心思想"),
+        H.p("YOLO = You Only Look Once。<b>一次前向传播，同时输出所有目标的框和类别</b>——不像两阶段法（先找候选区域再分类）要跑两遍。这就是它快的根本原因。"),
+        H.p("把图划分成 S×S 网格（比如 20×20），每个格子负责预测落在自己中心的目标。每个格子输出："),
+        H.ul([
+          "<b>框坐标</b> (x, y, w, h)：目标边界框",
+          "<b>置信度</b>：这个框里到底有没有东西",
+          "<b>类别概率</b>：是装甲板还是能量机关还是背景"
+        ]),
+        H.p("最后用 <b>NMS（非极大值抑制）</b>把同一个目标上重叠的多个框压成最好的一个。"),
+        H.table("YOLO 版本选择（RM 场景）", ["版本", "参数量", "速度", "RM 适用性"], [
+          ["YOLOv5n", "1.9M", "极快", "NUC 边缘设备首选"],
+          ["YOLOv8n", "3.2M", "很快", "精度/速度平衡，主流选择"],
+          ["YOLOv8s", "11M", "中等", "有 GPU 主机时用，精度更高"],
+          ["YOLO11n", "2.6M", "很快", "最新架构，RM 社区逐渐采用"]
+        ]),
+        H.note("master", "师父建议", "RM 装甲板检测是<b>小目标+类别少</b>的任务，YOLOv8n 就够了。别盲目上大模型——NUC 上跑不动再大也白搭。先小后大，精度不够再升 s。"),
+        H.quiz({
+          q: "YOLO 快的根本原因是？",
+          tag: "随堂测",
+          opts: ["网络层数少", "单阶段：一次前向直接出所有框，不需要候选区域两步走", "用了特殊 GPU", "图片压缩过"],
+          ans: 1,
+          explain: "两阶段法（如 Faster R-CNN）先花一次前向生成候选框，再对每个候选框分类——慢一倍以上。YOLO 单阶段一次全出。"
+        }),
+        H.prac({
+          id: "dlv-p3", level: 2, title: "手写：YOLO 输出张量解剖",
+          body: "一张 640×640 的图进 YOLOv8n，输出是 [1, 84, 8400] 的张量。解释每个维度含义：84 是什么、8400 是什么。再解释 NMS 为什么必须存在。",
+          hint: "84 = 4 个框坐标 + 80 类概率；8400 = 三个尺度网格点总数 80²+40²+20²；NMS 去重叠框。",
+          solution: H.code("text", "answer.txt", `输出 [1, 84, 8400]：
+  1    —— batch size，一张图
+  84   —— 4 (x,y,w,h 框坐标) + 80 (COCO 80 类的概率)
+        RM 自训练后只有 2~3 类，变成 4+3=7 维
+  8400 —— 三个尺度的网格点总数：
+        80×80 (检测小目标) + 40×40 (中) + 20×20 (大) = 8400
+        每个网格点都给出一组预测
+
+NMS 为什么必须：
+  同一个装甲板会被相邻多个网格点同时检出 → 5~10 个重叠框
+  NMS 按置信度排序：保留最高的，删掉与它 IoU>0.5 的其余框
+  没有它，一个装甲板出 8 个框，下游跟踪直接混乱`)
+        }),
+      ]},
+      { id: "dlv-data", title: "第 4 章 数据集：采集与标注", blocks: [
+        H.sub("数据比模型重要"),
+        H.p("深度学习圈的老话：<b>垃圾进垃圾出</b>。模型架构是公开的，胜负在数据。RM 数据集的特殊性：真实赛场画面极少，必须靠采集+合成增广凑。"),
+        H.code("text", "采集清单", `RM 装甲板数据采集 SOP：
+
+【场地采集】(最重要，占 60%)
+  - 己方 + 对方机器人各角度静止摆拍：500 张
+  - 云台慢转/快转动态抓帧：1000 张（视频抽帧）
+  - 不同距离 2m/4m/6m/8m 各一批
+  - 光照：白天自然光 / 场地灯光全开 / 灯光半开 各一批
+
+【对抗场景】(决定比赛表现，占 25%)
+  - 小陀螺状态（斜姿态装甲板）：500 张
+  - 半遮挡（机器人互相挡）：300 张
+  - 运动模糊（快门慢时）：300 张
+
+【负样本】(防误检，占 15%)
+  - 场上没有装甲板的空场景：300 张
+  - 观众席、大屏幕、其他发光物体：200 张
+
+总计约 4000~5000 张，比 1000 张精标强得多`),
+        H.sub("标注工具：LabelImg / CVAT"),
+        H.p("标注就是画框 + 选类别。生成 YOLO 格式的 txt 文件，每行：<code class='inline'>class x_center y_center width height</code>（全是 0~1 归一化值）。"),
+        H.note("pitfall", "标注三大坑", "①<b>框太松</b>（框比装甲板大一圈，网络学到的框永远偏大）②<b>类别不统一</b>（有人标 red 有人标 enemy，混了就废）③<b>漏标</b>（一张图里有 3 个装甲板只标了 2 个，第三个会被当背景学习，训练越久误检越多）。标注前先写标注规范文档，全组统一。"),
+        H.quiz({
+          q: "一张图里有 3 个装甲板但只标注了 2 个，会发生什么？",
+          tag: "随堂测",
+          opts: ["没关系，网络自己会发现", "第 3 个被当背景学习，训练越久越抑制它的检出", "loss 会报错", "只会影响这一张图"],
+          ans: 1,
+          explain: "未标注的目标成了「背景」。网络每一轮都在学习这里没有装甲板，把这个真目标压下去——负学习。这是数据集最阴的坑。"
+        }),
+        H.prac({
+          id: "dlv-p4", level: 2, title: "手写：标注规范文档",
+          body: "给队里写一份标注规范：类别定义（几类、怎么分）、框的松紧标准（贴合到什么程度）、哪些情况标难度标签、漏标自查流程。要求新人看完就能上手标。",
+          hint: "类别按颜色+大符分；框贴合到灯条外沿 2~3 像素；疑难样本标 hard；每 500 张交叉互查。",
+          solution: H.code("text", "label_spec.txt", `RM 装甲板标注规范 v1.0
+
+一、类别定义（4 类）
+  0 red_armor    己方可打击的红色装甲板
+  1 blue_armor   己方可打击的蓝色装甲板
+  2 base         基地装甲板（血量判定用）
+  3 ignore       难以辨认的目标（训练时忽略不算错）
+
+二、框的松紧
+  - 框紧贴装甲板灯条外沿，外扩不超过 3 像素
+  - 包含完整灯条，不含相邻结构
+  - 模糊到人眼看不清的 → 标 ignore，不硬标
+
+三、必须标全
+  一张图里有几个标几个。漏标 = 教网络"这里没有目标"，
+  是最严重的标注错误。标完做视野扫描自查（左上到右下）。
+
+四、难度标签（可选，用于分析）
+  easy   正面清晰
+  medium 侧斜 30°~60° 或轻微遮挡
+  hard   小陀螺斜姿态 / 重遮挡 / 运动模糊
+
+五、交叉互查
+  每 500 张换人复查一遍，重点查漏标和类别错。
+  复查发现问题率 > 5% → 这批重标。`)
+        }),
+      ]},
+      { id: "dlv-train", title: "第 5 章 训练：超参与调参", blocks: [
+        H.sub("训练流程全景"),
+        H.code("bash", "train.sh", `# YOLOv8n 训练（Ultralytics 框架）
+yolo detect train \
+  data=rm_armor.yaml \           # 数据集配置
+  model=yolov8n.pt \             # 预训练权重起步
+  epochs=300 \                   # RM 小数据集要练够
+  imgsz=640 \                    # 输入分辨率（小目标可上 960）
+  batch=16 \                     # 显存不够就降
+  patience=50 \                  # 50 轮没提升就早停
+  project=runs/armor \
+  name=exp1
+
+# rm_armor.yaml 内容：
+# path: /data/rm_armor
+# train: images/train
+# val: images/val
+# names:
+#   0: red_armor
+#   1: blue_armor`),
+        H.table("调参速查表", ["症状", "最可能原因", "第一刀"], [
+          ["loss 不降", "学习率不当 / 标签有错", "lr 除以 10；查标注"],
+          ["训练好测试差（过拟合）", "数据少 / 增广弱", "加增广；加数据"],
+          ["小目标检不到", "输入分辨率低", "imgsz 640 → 960"],
+          ["误检多", "负样本少 / 类别混", "补空场景负样本"],
+          ["框不准（偏大偏小）", "标注太松", "重审标注松紧"],
+          ["loss 变 NaN", "学习率过大", "lr 除以 10 + 梯度裁剪"]
+        ]),
+        H.note("master", "师父的训练哲学", "<b>先把数据搞对，再动超参</b>。十个调参问题九个是数据问题。训练前先可视化 100 张标注图看看框——一眼就能看出标注松紧和漏标。"),
+        H.quiz({
+          q: "训练集 mAP 很高但验证集很低（过拟合），第一刀砍哪里？",
+          tag: "随堂测",
+          opts: ["加 epoch 数", "加强数据增广 + 补数据", "换更大的模型", "提高学习率"],
+          ans: 1,
+          explain: "过拟合 = 网络把训练集背下来了。解法是让它见更多样的数据：翻转/HSV 增广/Mosaic 拼接，或者干脆补采集数据。换大模型会加剧过拟合。"
+        }),
+        H.prac({
+          id: "dlv-p5", level: 3, title: "手写：训练排障剧本",
+          body: "队伍遇到连续三个训练问题：①loss 50 轮不降 ②mAP 到 0.65 后小装甲板全丢 ③误检率突然翻倍。分别给出排查步骤和修复动作，写成可执行的排障清单。",
+          hint: "①查 lr 和标注质量 ②分辨率和锚框 ③负样本和增广强度。",
+          solution: H.code("text", "troubleshoot.txt", `问题① loss 50 轮不降
+  排查：
+    1. lr 是不是默认 0.01 没调？→ 先 /10 试试
+    2. 可视化 100 张标注图 → 查是否大面积漏标/类别错
+    3. 打印前 3 轮 loss：如果第一轮就高且平 → 标签错了
+  修复：lr=0.001 重训 + 重标问题批次
+
+问题② mAP 0.65 后小装甲板全丢
+  排查：
+    1. imgsz 是不是 640？远距离装甲板可能只有 15×15 像素
+    2. 看混淆矩阵：小目标类召回率是不是接近 0
+    3. 训练集里远距离样本占比是不是太少
+  修复：imgsz 上 960 + 补采 6m/8m 远距离样本
+
+问题③ 误检率突然翻倍
+  排查：
+    1. 最近一批新数据是不是混进了「观众席/大屏」场景当正样本
+    2. 增广强度是不是开太猛（HSV 扭到灯条颜色失真）
+    3. 对比上个好版本的验证集图片：具体在什么场景误检
+  修复：补 500 张空场景负样本 + 增广 HSV 幅度回调`)
+        }),
+      ]},
+    ]},
+
+    { id: "stage-dlv-3", title: "第三阶段 · 部署与实战", chapters: [
+      { id: "dlv-onnx", title: "第 6 章 导出 ONNX 与推理", blocks: [
+        H.sub("ONNX：模型界的通用语"),
+        H.p("训练框架（PyTorch）和部署引擎（TensorRT/OpenVINO）之间需要一座桥——ONNX 就是这座桥。<b>训练完 → 导 ONNX → 部署侧加载</b>，这是标准管线。"),
+        H.code("bash", "export.sh", `# 导出 ONNX
+yolo export model=runs/armor/exp1/weights/best.pt format=onnx opset=12
+
+# Python 端验证推理
+python -c "
+import onnxruntime as ort
+import numpy as np
+
+sess = ort.InferenceSession('best.onnx')
+inp = sess.get_inputs()[0]
+print('输入:', inp.name, inp.shape)      # images [1,3,640,640]
+print('输出:', sess.get_outputs()[0].shape)  # [1,84,8400]
+
+dummy = np.random.rand(1,3,640,640).astype(np.float32)
+out = sess.run(None, {inp.name: dummy})
+print('推理 OK', out[0].shape)
+"`),
+        H.note("pitfall", "导出三大坑", "①<b>opset 版本</b>：TensorRT 旧版只认 opset≤12，高了直接报错 ②<b>预处理不一致</b>：训练时 letterbox 到 640，部署忘了 → 精度暴跌 ③<b>NMS 在外面</b>：ONNX 导出默认不含 NMS，自己写后处理。"),
+        H.prac({
+          id: "dlv-p6", level: 2, title: "手写：ONNX 推理脚本骨架",
+          body: "写一个完整的 ONNX Runtime 推理脚本：读图 → letterbox 预处理 → 推理 → 解析 [1,84,8400] 输出 → 手写 NMS → 画出最终框。类别只有 2 类（红/蓝装甲板）。",
+          hint: "letterbox：等比缩放+灰边填充；输出转置后逐框解析；NMS 按 IoU>0.5 抑制。",
+          solution: H.code("python", "infer.py", `import onnxruntime as ort
+import numpy as np
+import cv2
+
+CLASSES = ["red_armor", "blue_armor"]
+CONF_TH = 0.45
+NMS_TH  = 0.5
+
+def letterbox(img, size=640):
+    h, w = img.shape[:2]
+    scale = min(size / h, size / w)
+    nh, nw = int(h * scale), int(w * scale)
+    resized = cv2.resize(img, (nw, nh))
+    canvas = np.full((size, size, 3), 114, dtype=np.uint8)
+    top  = (size - nh) // 2
+    left = (size - nw) // 2
+    canvas[top:top+nh, left:left+nw] = resized
+    return canvas, scale, left, top
+
+def nms(boxes, scores, iou_th):
+    keep = []
+    order = scores.argsort()[::-1]
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(boxes[i,0], boxes[order[1:],0])
+        yy1 = np.maximum(boxes[i,1], boxes[order[1:],1])
+        xx2 = np.minimum(boxes[i,2], boxes[order[1:],2])
+        yy2 = np.minimum(boxes[i,3], boxes[order[1:],3])
+        w = np.maximum(0, xx2 - xx1)
+        h = np.maximum(0, yy2 - yy1)
+        iou = (w * h) / ((boxes[i,2]-boxes[i,0])*(boxes[i,3]-boxes[i,1]) +
+                         (boxes[order[1:],2]-boxes[order[1:],0])*(boxes[order[1:],3]-boxes[order[1:],1]) - w*h)
+        order = order[iou <= iou_th]
+    return keep
+
+sess = ort.InferenceSession("best.onnx")
+img = cv2.imread("field.jpg")
+canvas, scale, dx, dy = letterbox(img)
+blob = cv2.dnn.blobFromImage(canvas, 1/255.0, (640,640), swapRB=True)
+
+out = sess.run(None, {"images": blob})[0]        # [1,84,8400]
+out = out[0].T                                    # [8400,84]
+
+boxes, scores, class_ids = [], [], []
+for row in out:
+    cls_score = row[4:].max()
+    if cls_score < CONF_TH: continue
+    cls_id = row[4:].argmax()
+    cx, cy, w, h = row[:4]
+    x1 = (cx - w/2 - dx) / scale
+    y1 = (cy - h/2 - dy) / scale
+    boxes.append([x1, y1, x1 + w/scale, y1 + h/scale])
+    scores.append(cls_score)
+    class_ids.append(cls_id)
+
+if boxes:
+    keep = nms(np.array(boxes), np.array(scores), NMS_TH)
+    for i in keep:
+        x1, y1, x2, y2 = map(int, boxes[i])
+        cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,0), 2)
+        cv2.putText(img, f"{CLASSES[class_ids[i]]} {scores[i]:.2f}",
+                    (x1, y1-6), 0, 0.6, (0,255,0), 2)
+
+cv2.imshow("YOLO", img)
+cv2.waitKey(0)`)
+        }),
+      ]},
+      { id: "dlv-trt", title: "第 7 章 TensorRT：C++ 高速部署", blocks: [
+        H.sub("为什么要 TensorRT"),
+        H.p("ONNX Runtime 在 NUC 上跑 YOLOv8n 大约 30~50FPS。<b>TensorRT 编译后的引擎能到 150~250FPS</b>——三到五倍。原理：层融合、精度量化（FP16/INT8）、kernel 针对硬件特调。"),
+        H.code("cpp", "trt_infer.cpp", `#include <NvInfer.h>
+#include <opencv2/opencv.hpp>
+#include <cuda_runtime.h>
+#include <vector>
+
+// TensorRT 推理骨架（关键步骤）
+class Detector {
+public:
+    void loadEngine(const std::string& path) {
+        // 1. 反序列化引擎文件
+        std::ifstream file(path, std::ios::binary);
+        engine_ = std::shared_ptr<nvinfer1::ICudaEngine>(
+            runtime_->deserializeCudaEngine(data.data(), size));
+        context_ = std::unique_ptr<nvinfer1::IExecutionContext>(engine_->createExecutionContext());
+    }
+
+    void detect(cv::Mat& frame) {
+        // 2. 预处理: letterbox + HWC->CHW + BGR->RGB + /255
+        preprocess(frame);
+
+        // 3. 拷贝到 GPU
+        cudaMemcpyAsync(gpu_in_, input_.data, input_bytes_, cudaMemcpyHostToDevice, stream_);
+
+        // 4. 前向推理
+        context_->enqueueV2(bindings_, stream_, nullptr);
+
+        // 5. 拷回结果 + NMS + 后处理
+        cudaMemcpyAsync(output_.data, gpu_out_, output_bytes_, cudaMemcpyDeviceToHost, stream_);
+        cudaStreamSynchronize(stream_);
+        postprocess(frame);
+    }
+};`),
+        H.table("TensorRT 速度对比（NUC11 + RTX 版本）", ["方案", "FPS", "适用"], [
+          ["ONNX Runtime CPU", "30~50", "开发调试阶段"],
+          ["TensorRT FP32", "80~120", "稳妥基线"],
+          ["TensorRT FP16", "150~250", "RM 主力方案"],
+          ["TensorRT INT8", "250~400", "极致速度（需校准）"]
+        ]),
+        H.note("master", "师父的部署哲学", "<b>Python 调通 → C++ 移植 → TensorRT 加速</b>，一步一验证。千万别直接写 C++ TensorRT——出问题分不清是逻辑错还是部署错。"),
+        H.quiz({
+          q: "TensorRT 为什么能快 3~5 倍？",
+          tag: "随堂测",
+          opts: ["模型变小了", "层融合 + 精度量化 + kernel 硬件特调", "用了更多 CPU 核", "跳过了预处理"],
+          ans: 1,
+          explain: "TensorRT 把多个连续算子融合成一个 kernel（减少显存搬运），把 FP32 权重压到 FP16/INT8（带宽减半），再针对你的 GPU 型号生成最优 kernel。"
+        }),
+        H.prac({
+          id: "dlv-p7", level: 3, title: "手写：C++ 推理后处理",
+          body: "手写 TensorRT 输出的后处理函数：输入 [8400, 84] 的输出张量，完成置信度过滤、坐标还原（letterbox 逆变换）、NMS，输出最终检测框列表。这是 C++ 部署里最容易出 bug 的一段。",
+          hint: "先做置信度粗筛减少计算量；letterbox 逆变换减去 padding 再除 scale；NMS 用 IoU 贪心。",
+          solution: H.code("cpp", "postprocess.cpp", `#include <vector>
+#include <algorithm>
+
+struct Det { float x1, y1, x2, y2, score; int cls; };
+
+float iou(const Det& a, const Det& b) {
+    float xx1 = std::max(a.x1, b.x1), yy1 = std::max(a.y1, b.y1);
+    float xx2 = std::min(a.x2, b.x2), yy2 = std::min(a.y2, b.y2);
+    float w = std::max(0.f, xx2 - xx1), h = std::max(0.f, yy2 - yy1);
+    float inter = w * h;
+    float uni = (a.x2-a.x1)*(a.y2-a.y1) + (b.x2-b.x1)*(b.y2-b.y1) - inter;
+    return uni > 0 ? inter / uni : 0;
+}
+
+std::vector<Det> postprocess(const float* out, int num_pred,
+                              float conf_th, float nms_th,
+                              float scale, float dx, float dy) {
+    std::vector<Det> dets;
+    // 84 = 4 坐标 + 80 类；RM 场景改为 4 + num_cls
+    const int num_cls = 2;
+    const int stride  = 4 + num_cls;
+
+    for (int i = 0; i < num_pred; ++i) {
+        const float* row = out + i * stride;
+        float best = row[4]; int cls = 0;
+        for (int c = 1; c < num_cls; ++c)
+            if (row[4 + c] > best) { best = row[4 + c]; cls = c; }
+        if (best < conf_th) continue;
+
+        float cx = row[0], cy = row[1], w = row[2], h = row[3];
+        // letterbox 逆变换
+        float x1 = (cx - w / 2 - dx) / scale;
+        float y1 = (cy - h / 2 - dy) / scale;
+        dets.push_back({x1, y1, x1 + w / scale, y1 + h / scale, best, cls});
+    }
+
+    // NMS（按分数贪心）
+    std::sort(dets.begin(), dets.end(),
+              [](const Det& a, const Det& b){ return a.score > b.score; });
+    std::vector<Det> keep;
+    for (size_t i = 0; i < dets.size(); ++i) {
+        bool suppressed = false;
+        for (size_t j = 0; j < keep.size(); ++j)
+            if (iou(dets[i], keep[j]) > nms_th) { suppressed = true; break; }
+        if (!suppressed) keep.push_back(dets[i]);
+    }
+    return keep;
+}`)
+        }),
+      ]},
+      { id: "dlv-track", title: "第 8 章 跟踪：ByteTrack 思想", blocks: [
+        H.sub("检测给框，跟踪给身份"),
+        H.p("YOLO 每帧独立检测，<b>它不知道「这帧的 3 号装甲板」和「上帧的 3 号装甲板」是同一个</b>。跟踪器（ByteTrack）负责关联帧间目标，给每个目标稳定的 ID——这是打小陀螺（预测目标下一帧位置）的前提。"),
+        H.code("text", "bytetrack 思想", `ByteTrack 核心思想（面试必考）：
+
+传统跟踪：只用高置信度检测做匹配
+ByteTrack：低置信度框也用上（两轮匹配）
+
+流程：
+  1. 检测输出按置信度分两组：
+     high: score > 0.5
+     low : 0.1 < score <= 0.5   ← 遮挡时目标框置信度掉到这组
+  2. 第一轮：high 组与现有轨迹做 IoU 匹配
+     匹配上 → 更新轨迹（Kalman 预测 + 观测修正）
+  3. 第二轮：未匹配的轨迹与 low 组再匹配
+     ← 关键！遮挡的目标在 low 组里也能续上，不会断 ID
+  4. 连续 30 帧未匹配 → 删除轨迹
+  5. 未匹配的 high 检测 → 新建轨迹
+
+为什么它在 RM 强：
+  小陀螺时装甲板姿态剧烈变化，置信度忽高忽低。
+  传统跟踪在低置信度帧丢 ID → 预测断 → 打不中。
+  ByteTrack 两轮匹配保住了 ID 连续性。`),
+        H.quiz({
+          q: "ByteTrack 相比传统跟踪的核心改进是什么？",
+          tag: "随堂测",
+          opts: ["用了更强的检测器", "两轮匹配：低置信度框也参与，遮挡时不断 ID", "速度更快", "不需要 Kalman 滤波"],
+          ans: 1,
+          explain: "遮挡时检测置信度会掉到 0.2~0.4。传统跟踪只信高置信度框，直接丢了；ByteTrack 第二轮用低置信度框续命，ID 不断，跟踪预测链不断。"
+        }),
+        H.prac({
+          id: "dlv-p8", level: 3, title: "手写：简化版 IoU 跟踪器",
+          body: "手写一个两轮匹配的简化跟踪器：输入每帧检测框列表（带置信度），输出每个目标的稳定 ID 和轨迹。要求实现：高低分分组、两轮 IoU 匹配、轨迹超时删除。用 3 帧模拟数据测试。",
+          hint: "轨迹结构 {id, box, missed}；每帧 missed+1，匹配上清零，超 3 帧删；下一 ID 自增。",
+          solution: H.code("python", "tracker.py", `import numpy as np
+
+class SimpleTracker:
+    def __init__(self, iou_th=0.3, max_miss=3):
+        self.iou_th = iou_th
+        self.max_miss = max_miss
+        self.tracks = []      # [{id, box, missed}]
+        self.next_id = 1
+
+    @staticmethod
+    def iou(a, b):
+        xx1, yy1 = max(a[0], b[0]), max(a[1], b[1])
+        xx2, yy2 = min(a[2], b[2]), min(a[3], b[3])
+        w, h = max(0, xx2-xx1), max(0, yy2-yy1)
+        inter = w * h
+        ua = (a[2]-a[0])*(a[3]-a[1]) + (b[2]-b[0])*(b[3]-b[1]) - inter
+        return inter/ua if ua > 0 else 0
+
+    def _match_round(self, tracks, dets):
+        used_d, used_t = set(), set()
+        pairs = []
+        for ti, tr in enumerate(tracks):
+            best_iou, best_di = self.iou_th, -1
+            for di, d in enumerate(dets):
+                if di in used_d: continue
+                v = self.iou(tr["box"], d[:4])
+                if v > best_iou: best_iou, best_di = v, di
+            if best_di >= 0:
+                used_d.add(best_di); used_t.add(ti)
+                pairs.append((ti, best_di))
+        return pairs, used_t, used_d
+
+    def update(self, detections):
+        # detections: [[x1,y1,x2,y2,score], ...]
+        high = [d for d in detections if d[4] > 0.5]
+        low  = [d for d in detections if 0.1 < d[4] <= 0.5]
+
+        # 第一轮：全部轨迹 vs high
+        pairs, used_t, _ = self._match_round(self.tracks, high)
+        for ti, di in pairs:
+            self.tracks[ti]["box"] = high[di][:4]
+            self.tracks[ti]["missed"] = 0
+
+        # 第二轮：剩下的轨迹 vs low
+        rest = [t for i, t in enumerate(self.tracks) if i not in used_t]
+        pairs2, used_t2, _ = self._match_round(rest, low)
+        for ti, di in pairs2:
+            rest[ti]["box"] = low[di][:4]
+            rest[ti]["missed"] = 0
+
+        # 未匹配轨迹 missed+1，超时删除
+        matched_ids = {t["id"] for t in self.tracks
+                       if t["missed"] == 0}
+        for t in self.tracks:
+            if t["id"] not in matched_ids:
+                t["missed"] += 1
+        self.tracks = [t for t in self.tracks if t["missed"] <= self.max_miss]
+
+        # 未匹配的 high 检测 → 新轨迹
+        matched_boxes = {tuple(t["box"]) for t in self.tracks if t["missed"] == 0}
+        for d in high:
+            if tuple(d[:4]) not in matched_boxes:
+                self.tracks.append({"id": self.next_id, "box": d[:4], "missed": 0})
+                self.next_id += 1
+
+        return [(t["id"], t["box"]) for t in self.tracks]
+
+# —— 3 帧模拟测试 ——
+tr = SimpleTracker()
+f1 = [[100,100,200,200,0.9], [400,100,500,200,0.85]]          # 两个高置信度
+f2 = [[102,103,198,201,0.35], [401,99,502,201,0.88]]          # 第1个被遮挡掉分
+f3 = [[104,105,196,202,0.92], [399,101,500,199,0.87]]         # 恢复
+
+print("帧1:", tr.update(f1))   # 新建 ID 1, 2
+print("帧2:", tr.update(f2))   # ID 1 靠 low 组保住
+print("帧3:", tr.update(f3))   # ID 1 恢复高分，ID 不变`)
+        }),
+      ]},
+      { id: "dlv-rune", title: "第 9 章 能量机关：深度学习方案", blocks: [
+        H.sub("大符为什么必须上深度学习"),
+        H.p("大符（能量机关）的待击打装甲板跟着整个扇叶旋转，转速按正弦规律变化，还叠加上下摆动。传统法：<b>色块锁不住</b>（高速旋转拖影）、<b>模板匹配跟不上</b>（姿态剧变）。深度学习 + 跟踪 + 正弦预测是唯一稳定解。"),
+        H.table("能量机关流水线", ["环节", "方案", "备注"], [
+          ["扇叶检测", "YOLO 检测 5 个装甲板", "类别: 已击打/未击打"],
+          ["目标选择", "选「未击打」且转速预测最佳的一个", "策略层"],
+          ["目标跟踪", "ByteTrack 保 ID", "小陀螺同款问题"],
+          ["转速预测", "拟合正弦 spd = a·sin(bt+c)+d", "EKF 或最小二乘"],
+          ["弹道提前量", "预测 t+飞行时间 的目标位置", "和弹道解算联动"]
+        ]),
+        H.note("master", "师父压箱底", "能量机关的核心不是检测是<b>预测</b>：弹丸飞行 200ms，你要打的是 200ms 后扇叶将到的位置。正弦参数拟合越准，命中率越高。这就是为什么 RM 视觉的上限是数学，不是调包。"),
+        H.prac({
+          id: "dlv-p9", level: 3, title: "手写：正弦转速拟合预测",
+          body: "能量机关转速满足 spd(t) = a·sin(b·t + c) + d。给你 60 帧的转速采样数据（时间戳+速度），写代码拟合四个参数，并预测 t=1.5s 时刻的转速和位置（转角积分）。",
+          hint: "scipy.optimize.curve_fit 拟合；位置 = 转速积分（离散求和）；初值给 a=1,b=1,c=0,d=均值。",
+          solution: H.code("python", "rune_predict.py", `import numpy as np
+from scipy.optimize import curve_fit
+
+def sine_model(t, a, b, c, d):
+    return a * np.sin(b * t + c) + d
+
+# —— 模拟 60 帧采样 ——
+true = (0.8, 2.0, 0.5, 1.0)          # a,b,c,d 真值
+t = np.linspace(0, 2.0, 60)
+spd = sine_model(t, *true) + np.random.normal(0, 0.02, 60)
+
+# —— 拟合 ——
+p0 = [1.0, 1.0, 0.0, spd.mean()]     # 初值很重要
+params, _ = curve_fit(sine_model, t, spd, p0=p0, maxfev=10000)
+a, b, c, d = params
+print(f"拟合: a={a:.3f} b={b:.3f} c={c:.3f} d={d:.3f}")
+print(f"真值: a={true[0]} b={true[1]} c={true[2]} d={true[3]}")
+
+# —— 预测 t=1.5s ——
+t_pred = 1.5
+spd_pred = sine_model(t_pred, *params)
+print(f"预测转速 @1.5s: {spd_pred:.3f} rad/s")
+
+# —— 位置预测（转速积分 = 转角）——
+t_future = np.linspace(0, t_pred, 200)
+angle = np.trapz(sine_model(t_future, *params), t_future)
+print(f"预测转角 @1.5s: {angle:.3f} rad = {np.degrees(angle):.1f}°")
+
+# —— 打击决策 ——
+# 弹丸飞行 0.2s → 提前量为角度积分到 t+0.2
+t_flight = 0.2
+t_seq = np.linspace(t_pred, t_pred + t_flight, 50)
+lead_angle = np.trapz(sine_model(t_seq, *params), t_seq)
+print(f"提前量(0.2s 飞行): {np.degrees(lead_angle):.1f}°")`)
+        }),
+      ]},
+      { id: "dlv-deploy", title: "第 10 章 上线：完整系统联调", blocks: [
+        H.sub("从能跑到达标"),
+        H.p("单模块全通了 ≠ 系统达标。上线前的联调清单："),
+        H.table("上线检查清单", ["项", "标准", "不达标症状"], [
+          ["检测 mAP@0.5", "≥ 0.85", "远距离/斜姿态漏检"],
+          ["单帧延迟", "≤ 8ms（检测+后处理）", "跟不上 60fps,丢帧"],
+          ["端到端延迟", "≤ 25ms（含通信+电控）", "打固定靶都偏"],
+          ["跟踪 ID 稳定性", "连续 300 帧 ID 不变", "小陀螺打不中"],
+          ["内存", "稳态 < 2GB 且不增长", "越跑越卡(泄漏)"],
+          ["断电恢复", "重启 30s 内出图", "比赛重启等不起"]
+        ]),
+        H.code("text", "联调排障剧本", `症状: 打固定靶准，打移动靶偏
+  1. 先量端到端延迟: 检测时间戳 → 电控收到时间戳
+     工具: 在图上画时间戳,录高速视频对比
+  2. 延迟 > 25ms → 分段定位:
+     相机曝光 5ms + 传输 3ms + 推理 6ms + 后处理 2ms
+     + 串口发送 2ms + 电控解析 2ms + 电控响应 5ms
+  3. 常见瓶颈:
+     - 推理 20ms: 没上 TensorRT / 没上 FP16
+     - 串口 10ms: 波特率 115200 太低,升 460800
+     - 电控 15ms: 控制周期和视觉不同步,加时间戳对齐
+
+症状: 越打越卡,重启恢复
+  1. top 看内存: 稳定增长 = 泄漏
+  2. 常见泄漏点:
+     - 每帧 new 的 Mat/Buffer 没释放
+     - TensorRT context 重复创建
+     - 日志无限写盘(罗技摄像头的录制)
+  3. valgrind / heaptrack 定位,必修再上场`),
+        H.note("master", "师父最后一课", "深度学习不是魔法，是<b>工程</b>：数据质量 × 训练技巧 × 部署优化 × 联调功夫，四个 90% 相乘，任何一个掉链子都不达标。你现在四样都有了，剩下的靠比赛喂经验。"),
+        H.prac({
+          id: "dlv-p10", level: 3, title: "毕业考：系统设计文档",
+          body: "为队伍写一份视觉系统设计文档：架构图（相机→推理→跟踪→解算→串口→电控）、各模块选型理由、延迟预算表、故障降级方案（深度学习挂了怎么办）、赛季迭代计划。要求新队员看完能接手。",
+          hint: "降级方案：传统 HSV 流水线保底；延迟预算每项给保守值；迭代按赛季节点排。",
+          solution: H.code("text", "design_doc.txt", `RM 视觉系统设计文档 v1.0
+
+一、架构与数据流
+  相机(60fps,全局快门)
+    → 驱动层(V4L2/MV-SDK,零拷贝)
+    → 预处理(letterbox,GPU)
+    → YOLOv8n@TensorRT FP16 (≈4ms)
+    → ByteTrack 跟踪 (≈1ms)
+    → PnP 解算(姿态+距离) (≈1ms)
+    → EKF 滤波(平滑+预测) (≈1ms)
+    → 弹道解算(提前量) (≈0.5ms)
+    → 串口发送(460800bps) (≈1ms)
+  端到端预算: 8.5ms(视觉) + 5ms(电控) ≈ 14ms ✓
+
+二、选型理由
+  检测 YOLOv8n: 小目标+少类别,n 版够用;
+    TensorRT 后 200+FPS,余量给后续模块
+  跟踪 ByteTrack: 小陀螺置信度波动时 ID 不断
+  解算 PnP: 装甲板四点已知尺寸,IPPE 平面解
+  滤波 EKF: 融合视觉观测+陀螺仪,消除视觉抖动
+  通信 串口: 赛场 WiFi 不可控,串口零延迟抖动
+
+三、延迟预算表(实测口径)
+  曝光 4ms | 读图 2ms | 预处理 1ms | 推理 4ms
+  跟踪 1ms | 解算 2.5ms | 串口 1ms | 电控 5ms
+  合计 ≈ 20.5ms → 目标移动速度 2m/s 时偏差 4cm
+  命中要求 < 6cm → 达标但无余量,持续优化推理
+
+四、故障降级方案
+  一级(检测 mAP 骤降): 切传统 HSV 流水线(保底 60% 命中)
+  二级(TensorRT 崩溃): 自动切 ONNX Runtime CPU(30fps,够用)
+  三级(相机断线): 视觉线程自杀+电控纯遥控
+  所有降级自动执行+蜂鸣报警,场上 10 秒内完成切换
+
+五、赛季迭代计划
+  10 月: 数据集 v2(补小陀螺 1000 张),mAP 0.85→0.90
+  11 月: INT8 量化,推理 4ms→2.5ms
+  12 月: 大符正弦预测上线,命中率 60%→80%
+  1  月: 与电控联合调参,端到端延迟 20→15ms
+  3  月: 赛前冻结版本,只修 bug 不加功能`)
+        }),
+      ]},
+    ]},
+  ]
+};
+</script>
+</body>
+</html>

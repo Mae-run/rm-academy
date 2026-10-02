@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>C 语言 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="c">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "c",
+  title: "C 语言",
+  badge: "LANG",
+  crumb: "C 语言 · 指针重火力区",
+  lead: "你有一点 C 基础，那正好——基础语法我们快速过，火力全部集中在<b>指针、内存、结构体</b>这三块嵌入式吃饭的家伙上。每一章都有随堂测和手写题，手写题不过关不许翻篇。",
+  prev: { href: "index.html", label: "首页" },
+  next: { href: "cpp.html", label: "C++" },
+
+  stages: [
+    { id: "stage-c-1", title: "第一阶段 · 热身与重申", chapters: [
+      { id: "c-setup", title: "第 1 章 开发环境与武器库", blocks: [
+        H.sub("你需要的工具"),
+        H.p("嵌入式开发不玩花哨的 IDE，先装好这三样："),
+        H.ul([
+          "<b>编译器</b>：Windows 装 <code class='inline'>MinGW-w64</code>（或 MSYS2 里的 gcc），Linux 直接 <code class='inline'>sudo apt install build-essential</code>。命令 <code class='inline'>gcc --version</code> 能出版本号就算装好。",
+          "<b>编辑器</b>：VS Code + C/C++ 扩展，或者你以后会用到的 STM32CubeIDE（电控章再装）。",
+          "<b>调试器</b>：GDB。记住：会 printf 的是工人，会 GDB 的才是工程师。"
+        ]),
+        H.sub("第一个程序：从命令行开始"),
+        H.p("不要用 IDE 的「运行」按钮，先体验一次完整的编译流程，理解源码怎么变成可执行文件："),
+        H.code("bash", "terminal", `gcc main.c -o main -Wall -Wextra -g
+./main`),
+        H.p("解释一下这行命令的每个零件："),
+        H.table("gcc 常用参数", ["参数", "作用"], [
+          ["<code class='inline'>-o main</code>", "输出文件名叫 main（不给就默认 a.out/a.exe）"],
+          ["<code class='inline'>-Wall -Wextra</code>", "打开警告。<b>永远开着</b>，警告就是bug的预兆"],
+          ["<code class='inline'>-g</code>", "生成调试信息，给 GDB 用"],
+          ["<code class='inline'>-O2</code>", "优化（发布时用，调试时别开）"]
+        ]),
+        H.note("master", "师父规矩", "从今天起，你写的每一个 C 文件，编译命令都带 <code class='inline'>-Wall -Wextra</code>。警告不是噪音，是编译器在免费给你 code review。有警告必须修掉，一个都不许留。"),
+        H.quiz({
+          q: "编译时加了 -Wall -Wextra 出现了一个警告但程序能跑，你应该：",
+          tag: "随堂测",
+          opts: ["能跑就行，不管它", "必须修掉，警告往往是未定义行为的前兆", "把警告关了眼不见心不烦", "发到群里问怎么办"],
+          ans: 1,
+          explain: "很多致命 bug（未初始化、类型截断、漏 return）在警告阶段就有信号。老工程师的代码是零警告的。"
+        }),
+      ]},
+      { id: "c-basic", title: "第 2 章 基本语法重申（快进模式）", blocks: [
+        H.p("这些你已经会了，这里只把「容易错」的点钉死。五分钟过完，错了的记到错题本。"),
+        H.sub("类型：大小很重要"),
+        H.table("常用类型在 32 位 STM32 上的大小", ["类型", "大小(字节)", "范围/说明"], [
+          ["char", "1", "-128 ~ 127（默认有符号）"],
+          ["uint8_t", "1", "0 ~ 255，寄存器标配"],
+          ["int", "4", "-2³¹ ~ 2³¹-1，<b>不要假设它大小</b>"],
+          ["float", "4", "约 7 位有效数字，后面跟 f"],
+          ["double", "8", "约 15 位有效数字，<b>STM32 上慢</b>"]
+        ]),
+        H.note("warn", "嵌入式铁则", "写嵌入式永远用 <code class='inline'>stdint.h</code> 的定长类型：<code class='inline'>uint8_t / int32_t</code>。别用 int 和 long——它们的大小随平台变。"),
+        H.sub("隐式转换：经典的坑"),
+        H.code("c", "implicit.c", `#include <stdio.h>
+#include <stdint.h>
+
+int main(void) {
+    uint8_t a = 200, b = 100;
+    uint16_t sum = a + b;          /* 整型提升：a、b 先提升为 int 再加，没问题 */
+    printf("%u\\n", sum);           /* 300，对 */
+
+    uint8_t c = a + b;             /* 300 截断回 uint8_t：300 % 256 = 44 */
+    printf("%u\\n", c);             /* 44！数据悄悄丢了 */
+
+    int32_t neg = -1;
+    uint32_t u = 42;
+    if (neg < (int32_t)u)          /* 不转会怎样？-1 转成巨大的无符号数 */
+        printf("负数小于正数\\n");  /* 不转则恒为假——经典陷阱 */
+    return 0;
+}`),
+        H.note("pitfall", "事故现场", "<b>有符号数和无符号数比较</b>是 C 语言埋雷最多的地方。规则：比较前，有符号数会被转成无符号。-1 变成 4294967295。编译器警告 <code class='inline'>-Wsign-compare</code>（含在 -Wextra 里）会提示你。"),
+        H.quiz({
+          q: "uint8_t a = 250; a = a + 10; 请问 a 的值是？",
+          tag: "随堂测",
+          opts: ["260", "4", "溢出报错", "未定义"],
+          ans: 1,
+          explain: "250+10=260，但 uint8_t 最大 255，260 对 256 取模 = 4。这叫截断（wrap-around），不报错、不警告（加法本身合法），数据就这么悄悄坏了。"
+        }),
+      ]},
+      { id: "c-flow", title: "第 3 章 流程控制（补几个你没见过的姿势）", blocks: [
+        H.p("if/else、for、while 你都会。这里补三个工程上天天用、教科书上讲得少的："),
+        H.sub("switch 的工程用法：状态机"),
+        H.code("c", "state_machine.c", `typedef enum {
+    STATE_IDLE,
+    STATE_RUNNING,
+    STATE_ERROR
+} SysState;
+
+void state_loop(SysState *st, int event) {
+    switch (*st) {
+    case STATE_IDLE:
+        if (event == 1) *st = STATE_RUNNING;
+        break;
+    case STATE_RUNNING:
+        if (event == 2) *st = STATE_ERROR;
+        break;
+    case STATE_ERROR:
+        if (event == 0) *st = STATE_IDLE;
+        break;
+    default:            /* 兜底：永远要有 default */
+        *st = STATE_IDLE;
+        break;
+    }
+}`),
+        H.p("电控代码里，整个机器人就是一个大状态机：上电自检 → 待机 → 遥控使能 → 比赛运行 → 故障。每个 <code class='inline'>case</code> 里只做「进出场」的事，逻辑别堆在一个 case 里。"),
+        H.note("pitfall", "漏 break 事故", "case 里忘写 break，程序会「贯穿」到下一个 case 继续执行。这是 C 语言史上引发过真实安全事故的坑。每个 case 写完就问自己：break 了吗？"),
+        H.sub("goto：唯一的合法用途"),
+        H.p("教科书说别用 goto，师父说：有一个例外——<b>函数内错误集中清理</b>。Linux 内核里到处都是这个模式："),
+        H.code("c", "goto_cleanup.c", `int do_something(void) {
+    int *buf = malloc(1024);
+    FILE *f  = fopen("data.txt", "r");
+    if (!buf) return -1;
+    if (!f)  { free(buf); return -2; }        /* 每个错误都要手动清一遍，烦 */
+    if (process(f, buf) != 0) { free(buf); fclose(f); return -3; }  /* 更烦 */
+    free(buf); fclose(f);
+    return 0;
+}
+
+/* goto 版本：错误统一出口，清爽不漏 */
+int do_something_v2(void) {
+    int ret = 0;
+    int *buf = malloc(1024);
+    FILE *f  = NULL;
+    if (!buf) { ret = -1; goto out; }
+    f = fopen("data.txt", "r");
+    if (!f)   { ret = -2; goto out; }
+    if (process(f, buf) != 0) { ret = -3; goto out; }
+out:
+    free(buf);        /* free(NULL) 是安全的，放心统一调 */
+    if (f) fclose(f);
+    return ret;
+}`),
+        H.note("tip", "冷知识", "<code class='inline'>free(NULL)</code> 和 <code class='inline'>delete</code> 空指针一样，标准规定是安全空操作。所以统一出口里可以无脑 free。"),
+      ]},
+      { id: "c-func", title: "第 4 章 函数（为指针做铺垫）", blocks: [
+        H.p("函数这块你的主要缺口是「参数怎么传」——这直接决定你能不能懂指针。"),
+        H.sub("C 只有值传递，记死这一条"),
+        H.code("c", "pass_by_value.c", `void try_change(int x) { x = 100; }        /* 改的是复印件 */
+
+void real_change(int *x) { *x = 100; }       /* 把原件的地址给人家，改的是原件 */
+
+int main(void) {
+    int a = 1;
+    try_change(a);
+    printf("%d\\n", a);      /* 1，没变 */
+    real_change(&a);
+    printf("%d\\n", a);      /* 100，变了 */
+    return 0;
+}`),
+        H.p("记住这个模型：<b>函数调用时，实参被复制一份给形参。</b>想改调用者的变量，就必须把它的地址传进去。这就是指针存在的头号理由——也是你接下来两章的全部内容。"),
+        H.sub("函数声明放头文件，定义放 .c"),
+        H.code("c", "math_utils.h", `#ifndef MATH_UTILS_H      /* 防止头文件被重复包含 */
+#define MATH_UTILS_H
+
+int clamp(int v, int lo, int hi);   /* 只写声明（原型） */
+
+#endif`),
+        H.code("c", "math_utils.c", `#include "math_utils.h"
+
+int clamp(int v, int lo, int hi) {   /* 定义（实现） */
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}`),
+        H.note("tip", "工程习惯", "<code class='inline'>.h</code> 是「菜单」（对外承诺的接口），<code class='inline'>.c</code> 是「厨房」（具体实现）。别的文件只 include 菜单，不偷看厨房。include 自己项目的头文件用双引号，系统头文件用尖括号。"),
+        H.quiz({
+          q: "为什么 swap 函数必须写成 void swap(int *a, int *b) 而不能是 void swap(int a, int b)？",
+          tag: "随堂测",
+          opts: [
+            "因为指针更快",
+            "因为 C 只有值传递，不传地址函数改不了调用者的变量",
+            "编译器强制要求的",
+            "两种写法效果一样"
+          ],
+          ans: 1,
+          explain: "值传递下形参是实参的副本，改副本动不了原件。传地址后，函数通过地址直接读写调用者内存里的变量。"
+        }),
+      ]},
+    ]},
+
+    { id: "stage-c-2", title: "第二阶段 · 数组与字符串", chapters: [
+      { id: "c-array", title: "第 5 章 数组（指针的亲密战友）", blocks: [
+        H.sub("数组的真相：它就是一段连续内存"),
+        H.code("c", "array_memory.c", `int nums[5] = {10, 20, 30, 40, 50};
+/* 内存示意（假设起始地址 0x1000，int 占 4 字节）：
+ * 地址    0x1000 0x1004 0x1008 0x100C 0x1010
+ * 值       10     20     30     40     50
+ * 下标      [0]    [1]    [2]    [3]    [4]
+ */`),
+        H.p("C <b>不检查数组越界</b>。<code class='inline'>nums[5]</code>、<code class='inline'>nums[100]</code> 都能编译通过，然后读/写别人家内存——可能崩、可能不崩、可能把别的变量改坏。嵌入式里这直接是「机器人抽风」。"),
+        H.note("pitfall", "越界写", "数组大小要传参时，数组会<b>退化成指针</b>，<code class='inline'>sizeof</code> 拿不到真实长度（下面指针章细讲）。数组长度要么额外传参，要么用宏 <code class='inline'>#define ARR_LEN(a) (sizeof(a)/sizeof((a)[0]))</code>（仅对数组本体有效）。"),
+        H.sub("二维数组"),
+        H.code("c", "matrix.c", `int grid[3][4] = {
+    {1, 2, 3, 4},
+    {5, 6, 7, 8},
+    {9, 10, 11, 12}
+};
+/* 连续内存：3 行 4 列 = 12 个 int 一条线排开
+ * grid[i][j] 的地址 = 起始 + (i*4 + j)*sizeof(int)
+ */`),
+        H.p("机器人比赛里，状态转移表、坐标网格、图像像素（灰度图就是 <code class='inline'>uint8_t img[高][宽]</code>）全是二维数组。"),
+        H.quiz({
+          q: "int a[10]; int i = 10; a[i] = 0; 这段代码会发生什么？",
+          tag: "随堂测",
+          opts: ["编译报错", "运行时报错", "编译运行都通过，但写越界了", "把 a[0] 清零"],
+          ans: 2,
+          explain: "a[10] 越界（合法下标 0~9）。C 不做越界检查，这叫未定义行为（UB）：可能没事、可能崩、可能悄悄破坏别的数据。嵌入式上最可怕的是最后一种。"
+        }),
+      ]},
+      { id: "c-string", title: "第 6 章 字符串（C 里的“字符串”根本不存在）", blocks: [
+        H.p("先说透：C 没有字符串类型。<b>字符串 = char 数组 + 约定俗成的结尾 '\\0'</b>。所有字符串函数都靠找这个 0 判断结尾。"),
+        H.code("c", "string_truth.c", `char s[6] = {'H','e','l','l','o','\\0'};
+/* 等价写法 */
+char s2[] = "Hello";          /* 编译器自动补 \\0，sizeof(s2)==6 */
+char *s3   = "Hello";         /* 字符串字面量，在只读区！s3[0]='J' 会崩 */
+
+printf("%zu %zu\\n", sizeof(s2), strlen(s2));   /* 6 5 */`),
+        H.sub("最常用的几个 <string.h> 函数"),
+        H.table("string.h 常用函数", ["函数", "作用", "要命的注意点"], [
+          ["strlen(s)", "长度（不含 \\0）", "O(n) 遍历，别在循环条件里反复调"],
+          ["strcpy(dst,src)", "复制", "<b>dst 必须够大</b>，溢出即事故；建议用 strncpy"],
+          ["strcmp(a,b)", "比较", "返回 0 表示相等！和直觉相反"],
+          ["strcat(dst,src)", "拼接", "同样要 dst 够大"],
+          ["snprintf(buf,n,fmt,...)", "格式化写入", "<b>最安全的格式化</b>，永远用它代替 sprintf"]
+        ]),
+        H.note("warn", "strcmp 返回值", "<code class='inline'>if (strcmp(a,b))</code> 的意思是「不相等时」。想判等必须写 <code class='inline'>strcmp(a,b) == 0</code>。这个反直觉设计坑了几代人。"),
+        H.sub("机器人实战：解析裁判系统/遥控器数据帧"),
+        H.code("c", "parse_cmd.c", `#include <stdio.h>
+#include <string.h>
+
+/* 收到一行命令 "CH1:1024;CH2:512" ，解析出通道值 */
+int parse_channels(const char *line, int *ch1, int *ch2) {
+    const char *p = line;
+    char key[8]; int val; int n;
+
+    int got1 = 0, got2 = 0;
+    while (sscanf(p, "%7[^:]:%d%n", key, &val, &n) == 2) {
+        if      (strcmp(key, "CH1") == 0) { *ch1 = val; got1 = 1; }
+        else if (strcmp(key, "CH2") == 0) { *ch2 = val; got2 = 1; }
+        p += n;
+        if (*p == ';') p++;      /* 跳过分隔符 */
+        else break;
+    }
+    return got1 && got2;         /* 两个都拿到才算成功 */
+}`),
+        H.p("电控固件里和上位机对协议、解析字符串命令是日常。sscanf 的 <code class='inline'>%n</code>（已消耗字符数）是推进解析指针的利器。"),
+      ]},
+    ]},
+
+    { id: "stage-c-3", title: "第三阶段 · 指针重火力（本课核心）", chapters: [
+      { id: "c-pointer-basic", title: "第 7 章 指针基础 ★★★", blocks: [
+        H.note("master", "师父的话", "接下来三章是整个 C 语言的珠穆朗玛。不怕慢，就怕站。建议准备草稿纸，每一段代码都画出内存图——变量画成格子，指针画成箭头。画得出来就是懂了，画不出来就是没懂。"),
+        H.sub("一句话定义指针"),
+        H.p("<b>指针就是存「内存地址」的变量。</b> 每个变量住在内存里，门牌号就是地址；指针变量里存的就是这个门牌号。"),
+        H.code("c", "pointer_basics.c", `int age = 20;
+int *p = &age;      /* & 取地址：p 里存的是 age 的门牌号 */
+
+/* 读法（从右往左念）：
+ * int *p  →  "p 是一个指针，指向 int" 
+ * *p      →  "顺着 p 里的地址找过去，取那个格子的值"（解引用）
+ * &age    →  "取 age 的地址"
+ */
+
+printf("%d\\n",  age);   /* 20   直接读 */
+printf("%d\\n", *p);     /* 20   沿地址找过去读 —— 同一个格子 */
+printf("%p\\n", (void*)p); /* age 的地址，比如 0x7ffd... */
+
+*p = 99;                 /* 沿地址找过去写 */
+printf("%d\\n", age);    /* 99   age 被改了 */`),
+        H.sub("两张图，胜过千言"),
+        H.code("text", "内存图", `    内存地址      变量名     值
+   ┌─────────┐
+   │ 0x1000  │  age    │  20  │←──┐
+   ├─────────┼─────────┼─────┤   │
+   │ 0x2000  │  p      │0x1000│───┘  p 里存的是 age 的地址
+   └─────────┴─────────┴─────┘
+
+*p 的意思是：拿出 p 的值(0x1000)当地址，去那个地址读写。`),
+        H.p("所以 <code class='inline'>*p = 99</code> 实际是「往 0x1000 号格子写 99」，而 0x1000 正是 age 的家。这就是函数能改外部变量的原理。"),
+        H.sub("野指针：C 程序员的头号噩梦"),
+        H.code("c", "wild_pointer.c", `int *p1;              /* 未初始化：内容是随机垃圾，指向随机地址 */
+/* *p1 = 10; */        /* 💥 未定义行为：往随机地址写数据，可能崩可能更糟 */
+
+int *p2 = NULL;        /* 好习惯：暂时没有目标就先设 NULL */
+if (p2 != NULL) {      /* 用之前先判空 */
+    *p2 = 10;
+}
+
+int *p3 = NULL;
+/* *p3 = 10; */        /* 💥 解引用 NULL 也会崩（段错误），但这是"好的崩"：
+                        /* 立刻死在现场，比悄悄写坏内存好查一万倍 */`),
+        H.note("pitfall", "三条指针军规", "① 定义指针立刻初始化（没有就 NULL）；② 解引用前先判空或确认合法；③ free 之后立刻置 NULL，防「悬垂指针」。"),
+        H.sub("指针的函数实战：经典的 swap"),
+        H.code("c", "swap.c", `void swap(int *a, int *b) {
+    int tmp = *a;      /* 3. 顺着 a 的地址取值存 tmp */
+    *a = *b;           /* 4. 把 b 指向的值写进 a 指向的格子 */
+    *b = tmp;          /* 5. tmp 写进 b 指向的格子 */
+}
+
+int main(void) {
+    int x = 1, y = 2;
+    swap(&x, &y);      /* 1. 传 x、y 的地址 */ 
+    printf("%d %d\\n", x, y);   /* 2 1 */
+}`),
+        H.quiz({
+          q: "int a = 5; int *p = &a; 请问 *p + 1 和 *(p + 1) 的区别是？",
+          tag: "随堂测",
+          opts: ["一样，都是 6", "*p+1 是 6（值的算术）；*(p+1) 是读 a 旁边那块内存（越界）", "编译错误", "*p+1 是地址，*(p+1) 是值"],
+          ans: 1,
+          explain: "运算符优先级：*p 先结合，+1 加在值上得 6。*(p+1) 是指针算术：地址加一个 int 的大小，指向 a 之后的内存——那是未定义行为。这题做错说明 * 和 & 还没分清，回炉。"
+        }),
+        H.prac({
+          id: "c-p1", level: 1, title: "手写：三变量排序（不许用数组）",
+          body: "纸上手写函数 <code class='inline'>void sort3(int *a, int *b, int *c)</code>，调用后 *a≤*b≤*c。要求只用指针解引用和临时变量，不许定义数组。",
+          hint: "两两比较，交换用第三个临时变量；比较顺序：a-b、a-c、b-c。",
+          solution: H.code("c", "answer.c", `void sort3(int *a, int *b, int *c) {
+    int t;
+    if (*a > *b) { t = *a; *a = *b; *b = t; }
+    if (*a > *c) { t = *a; *a = *c; *c = t; }   /* 现在 *a 最小 */
+    if (*b > *c) { t = *b; *b = *c; *c = t; }   /* 再排 b、c */
+}`)
+        }),
+      ]},
+      { id: "c-pointer-adv", title: "第 8 章 指针进阶 ★★★", blocks: [
+        H.sub("指针与数组：一个身份证两个名字（almost）"),
+        H.code("c", "ptr_array.c", `int arr[5] = {10, 20, 30, 40, 50};
+int *p = arr;          /* 数组名在表达式中退化成首元素地址：&arr[0] */
+
+/* 以下四种写法完全等价，都是第 i 个元素 */
+printf("%d %d %d %d\\n", arr[i], *(arr+i), p[i], *(p+i));
+
+/* arr[i] 只是 *(arr + i) 的语法糖！
+ * 下标运算符 [] 从来不是"数组专属"，它就是指针算术。
+ * 有趣事实：i[arr] 也能编译——因为 *(i+arr) 等价。别这么写，但要知道原理。
+ */`),
+        H.sub("指针算术：加 1 到底加多少？"),
+        H.p("指针 +1 不是地址加 1 字节，而是<b>加一个「所指类型的大小」</b>。类型决定步长："),
+        H.code("c", "pointer_arith.c", `int    ai[3];  int    *pi = ai;     /* pi+1 → 地址 +4 */
+double ad[3];  double *pd = ad;     /* pd+1 → 地址 +8 */
+char  ac[3];   char   *pc = ac;     /* pc+1 → 地址 +1 */
+
+/* 这就是为什么指针必须有类型：
+ * 类型告诉你 ① 步长多宽 ② 读出来怎么解释。
+ * void* 没有步长信息，所以不能做算术、不能解引用。 */
+
+/* 遍历数组的标准姿势 */
+int sum = 0;
+for (int *q = ai; q < ai + 3; q++)   /* 末指针 arr+n 是合法哨兵 */
+    sum += *q;`),
+        H.note("tip", "万能口诀", "“指针加减，按类型跳。”p+n 的实际地址 = p 的地址 + n × sizeof(指针指向的类型)。"),
+        H.sub("指针与 const：读锁与写锁"),
+        H.code("c", "const_ptr.c", `int a = 1, b = 2;
+
+const int *p1 = &a;     /* 底层 const：*p1 只读。p1 可改指向，值不能改 */
+int const *p2 = &a;     /* 同上，写法不同而已 */
+
+int * const p3 = &a;    /* 顶层 const：p3 本身只读。指向锁死，值可改 */
+
+const int * const p4 = &a;  /* 全锁：指向、值都不能改 */
+
+/* 记忆法：const 在 * 左边 → 锁住"指向的东西"（数据只读）
+ *        const 在 * 右边 → 锁住"指针自己"（指向固定） */
+p1 = &b;      /* OK */
+/* *p1 = 10; */ /* 编译错：只读 */
+*p3 = 10;     /* OK */
+/* p3 = &b; */  /* 编译错：指向锁死 */`),
+        H.sub("二级指针：指向指针的指针"),
+        H.code("c", "double_ptr.c", `int x = 42;
+int *p  = &x;      /* p  → x  */
+int **pp = &p;     /* pp → p  */
+
+**pp = 100;        /* 顺两层地址找到 x：*pp 是 p，**pp 是 x */
+printf("%d\\n", x);   /* 100 */
+
+/* 什么时候用？当你想在函数里"修改指针本身"时 */
+void alloc_int(int **out) {
+    *out = malloc(sizeof(int));   /* 改的是调用者手里的指针 */
+    **out = 7;
+}
+int *q = NULL;
+alloc_int(&q);        /* q 现在指向新内存 */`),
+        H.sub("函数指针：C 的回调机制（RTOS/中断的基石）"),
+        H.code("c", "func_ptr.c", `/* 声明一个函数指针类型：参数 int，返回 void */
+typedef void (*EventHandler)(int event);
+
+/* 两个具体处理函数 */
+void on_button(int ev)  { printf("按钮事件 %d\\n", ev); }
+void on_sensor(int ev)  { printf("传感器事件 %d\\n", ev); }
+
+/* 事件分发器：不关心谁来处理，只管调用 */
+void dispatch(EventHandler h, int ev) { h(ev); }
+
+int main(void) {
+    dispatch(on_button, 1);   /* 传函数名就是传它的地址 */
+    dispatch(on_sensor, 2);
+    return 0;
+}`),
+        H.p("看懂这个，你就看懂了 FreeRTOS 的 <code class='inline'>xTaskCreate</code> 第一个参数（任务函数指针）、中断回调注册、以及几乎一切框架的「钩子」机制。C 语言没有虚函数和接口，函数指针就是它的多态。"),
+        H.note("master", "读复杂声明的秘诀：右左法则", "从变量名出发，先右后左：<code class='inline'>int (*fp)(int)</code> → fp 先遇括号看右边无、看左边是 *，所以 fp 是指针；跳出括号右边 (int) 是函数参数，左边 int 是返回值 → 「fp 是指向 int(int) 函数的指针」。每天大声念两个，一周后任何声明都能秒读。"),
+        H.quiz({
+          q: "int arr[4]; printf(\"%d\", *(arr+2)); 等价于？",
+          tag: "随堂测",
+          opts: ["arr[1]", "arr[2]", "arr+2 的地址", "编译错误"],
+          ans: 1,
+          explain: "*(arr+2) 就是 arr[2] 的真身。下标是语法糖，本质全是指针算术。"
+        }),
+        H.prac({
+          id: "c-p2", level: 2, title: "手写：strlen / strcpy / strcmp 全家桶",
+          body: "不许 include 任何头文件，手写三个函数：size_t my_strlen(const char *s)、char *my_strcpy(char *dst, const char *src)、int my_strcmp(const char *a, const char *b)。只用指针推进，不许用下标。",
+          hint: "三个都是「走到 \\0 为止」的循环；strcmp 逐字符比，不等时返回差值。",
+          solution: H.code("c", "my_string.c", `size_t my_strlen(const char *s) {
+    const char *p = s;
+    while (*p) p++;             /* 走到 \\0 停 */
+    return (size_t)(p - s);     /* 指针差 = 元素个数 */
+}
+
+char *my_strcpy(char *dst, const char *src) {
+    char *ret = dst;            /* 记住起点，最后要返回 */
+    while ((*dst++ = *src++))   /* 经典写法：复制 \\0 后循环自然结束 */
+        ;
+    return ret;
+}
+
+int my_strcmp(const char *a, const char *b) {
+    while (*a && *a == *b) { a++; b++; }
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+}`)
+        }),
+        H.prac({
+          id: "c-p3", level: 2, title: "手写：反向遍历数组",
+          body: "手写函数 <code class='inline'>void print_reverse(const int *arr, size_t n)</code>，从最后一个元素倒着打印到第一个。只许用指针，不许用下标运算符 []。",
+          hint: "从 p = arr + n - 1 开始，向 arr 方向走。注意 n==0 时不能解引用 arr-1。",
+          solution: H.code("c", "reverse.c", `void print_reverse(const int *arr, size_t n) {
+    if (n == 0) return;
+    const int *p = arr + n - 1;      /* 最后一个元素 */
+    while (p >= arr) {
+        printf("%d ", *p);
+        p--;
+    }
+    printf("\\n");
+}`)
+        }),
+      ]},
+      { id: "c-mem", title: "第 9 章 内存管理 ★★★（malloc/free 战场）", blocks: [
+        H.sub("先看懂内存布局"),
+        H.code("text", "进程内存布局（从低地址到高地址）", `┌─────────────────┐ 高地址
+│   栈 (Stack)     │ ← 局部变量、函数参数、返回地址
+│      ↓↓          │    向下增长，函数返回自动回收
+│                 │
+│        ...       │
+│                 │
+│      ↑↑          │
+│   堆 (Heap)      │ ← malloc 的地盘，向上增长，必须手动 free
+├─────────────────┤
+│ 全局/静态区(BSS) │ ← 未初始化的全局变量
+│ 全局/静态区(DATA)│ ← 已初始化的全局变量
+├─────────────────┤
+│  代码段 (Text)   │ ← 机器指令、字符串字面量
+└─────────────────┘ 低地址`),
+        H.sub("malloc / free 基本操作"),
+        H.code("c", "malloc_basic.c", `#include <stdlib.h>     /* malloc/free 在这 */
+
+int *nums = malloc(10 * sizeof(int));   /* 要 10 个 int */
+if (!nums) {                            /* 分配可能失败，必须查！ */
+    return -1;
+}
+for (int i = 0; i < 10; i++) nums[i] = i * i;
+
+free(nums);          /* 用完立刻还 */
+nums = NULL;         /* 军规第三条：free 后立刻置 NULL */
+
+/* 要点：
+ * 1. malloc 的参数是"字节数"，习惯写 n * sizeof(类型)
+ * 2. 返回 void*，C 里不用强转（C++ 才要）
+ * 3. 分配的是未初始化内存，内容是垃圾，别直接读
+ * 4. realloc 可以扩容（会搬家，记得用返回值更新指针） */`),
+        H.sub("三大内存惨案"),
+        H.table("内存错误全家福", ["错误", "代码长相", "后果"], [
+          ["内存泄漏", "malloc 了没 free", "内存越占越多，机器人跑半小时崩"],
+          ["悬垂指针", "free(p) 后继续用 *p", "读写已归还内存，数据错乱"],
+          ["重复释放", "free(p) 两次", "堆结构破坏，随机崩溃"]
+        ]),
+        H.code("c", "memory_crimes.c", `/* 惨案一：泄漏 */
+void leak(void) {
+    char *buf = malloc(256);
+    /* ... 用完了，忘了 free 就 return —— 256 字节永远丢了 */
+}
+
+/* 惨案二：悬垂（use after free） */
+int *dangling(void) {
+    int *p = malloc(sizeof(int));
+    *p = 42;
+    free(p);
+    return p;             /* 调用者拿到的是一张"作废的房卡" */
+}
+
+/* 惨案三：重复释放 */
+void double_free(void) {
+    int *p = malloc(4);
+    free(p);
+    free(p);              /* 💥 堆管理器直接崩给你看 */
+}`),
+        H.note("master", "师父的内存心法", "每写一个 malloc，当场就写好配对的 free（哪怕先空着位置）。谁申请、谁释放，函数内申请就函数内释放；要跨函数就明确注释「所有权移交」。C++ 章你会学到 RAII，那是根治这些惨案的良药。"),
+        H.sub("实战：动态数组（vector 的前世）"),
+        H.code("c", "dyn_array.c", `typedef struct {
+    int  *data;
+    size_t size;      /* 当前元素数 */
+    size_t capacity;  /* 已分配容量 */
+} IntVec;
+
+int vec_push(IntVec *v, int x) {
+    if (v->size == v->capacity) {                /* 满了，扩容 */
+        size_t nc = v->capacity ? v->capacity * 2 : 4;   /* 2 倍扩容 */
+        int *nd = realloc(v->data, nc * sizeof(int));
+        if (!nd) return -1;                      /* realloc 失败原内存还在 */
+        v->data = nd;
+        v->capacity = nc;
+    }
+    v->data[v->size++] = x;
+    return 0;
+}
+
+void vec_free(IntVec *v) { free(v->data); v->data = NULL; v->size = v->capacity = 0; }`),
+        H.p("这段代码看懂了，C++ 的 <code class='inline'>std::vector</code> 对你就没有任何魔法了——它就是这么实现的，只不过把 free 换成了析构函数自动调用。"),
+        H.quiz({
+          q: "int *p = malloc(4); free(p); *p = 1; 这段代码的问题属于？",
+          tag: "随堂测",
+          opts: ["内存泄漏", "悬垂指针（use after free）", "重复释放", "没有问题"],
+          ans: 1,
+          explain: "free 之后 p 还留着旧地址（悬垂指针），再解引用就是访问已归还的内存——未定义行为。free 后立刻 p=NULL 就能在解引用时「快速崩、好排查」。"
+        }),
+        H.prac({
+          id: "c-p4", level: 2, title: "手写：安全拼接字符串",
+          body: "手写 <code class='inline'>int str_join(char *out, size_t out_size, const char *a, const char *b)</code>：把 a、b 拼接写入 out，保证绝不越界（含结尾 \\0）。成功返回写入长度，out_size 不够返回 -1。",
+          hint: "先算 strlen(a)+strlen(b)+1 是否超过 out_size；再手动复制两段。想想为什么不能直接用 strcat。",
+          solution: H.code("c", "str_join.c", `#include <string.h>
+
+int str_join(char *out, size_t out_size, const char *a, const char *b) {
+    size_t la = strlen(a), lb = strlen(b);
+    if (la + lb + 1 > out_size) return -1;    /* +1 给 \\0 */
+
+    memcpy(out, a, la);
+    memcpy(out + la, b, lb + 1);              /* 连 b 的 \\0 一起拷 */
+    return (int)(la + lb);
+}`)
+        }),
+        H.prac({
+          id: "c-p5", level: 3, title: "手写：矩阵转置（堆上分配）",
+          body: "手写 <code class='inline'>int **matrix_transpose(int **m, int rows, int cols)</code>：在堆上 new 一个 cols×rows 的结果矩阵并转置填充。返回新矩阵。调用方负责释放。再写一个 matrix_free 配套释放函数（想想为什么不能只 free 一次）。",
+          hint: "结果矩阵是「指针数组」结构：先 malloc cols 个 int*，再每行 malloc rows 个 int。释放时逐行 free 再 free 外层。",
+          solution: H.code("c", "transpose.c", `#include <stdlib.h>
+
+int **matrix_transpose(int **m, int rows, int cols) {
+    int **t = malloc(cols * sizeof(int *));
+    if (!t) return NULL;
+    for (int i = 0; i < cols; i++) {
+        t[i] = malloc(rows * sizeof(int));
+        if (!t[i]) {                    /* 半路失败要把已分配的都还回去 */
+            for (int k = 0; k < i; k++) free(t[k]);
+            free(t);
+            return NULL;
+        }
+        for (int j = 0; j < rows; j++)
+            t[i][j] = m[j][i];
+    }
+    return t;
+}
+
+void matrix_free(int **m, int rows) {   /* 注意参数是"行数" */
+    for (int i = 0; i < rows; i++) free(m[i]);
+    free(m);
+}`)
+        }),
+      ]},
+    ]},
+
+    { id: "stage-c-4", title: "第四阶段 · 结构体与工程化", chapters: [
+      { id: "c-struct", title: "第 10 章 结构体（机器人的零件图纸）", blocks: [
+        H.sub("结构体 = 把相关数据打包成一个新类型"),
+        H.code("c", "motor_struct.c", `typedef struct {
+    uint16_t id;          /* CAN 总线上的电机 ID */
+    float    position;    /* 当前角度(rad) */
+    float    speed;       /* 当前转速(rad/s) */
+    float    current;     /* 反馈电流 */
+    float    kp, ki, kd;  /* PID 参数 */
+    float    integ;       /* 积分累计 */
+} Motor;
+
+Motor m3508;
+m3508.id = 0x201;
+m3508.kp = 10.0f;
+m3508.position = 1.57f;`),
+        H.sub("结构体指针：嵌入式最常用的姿势"),
+        H.code("c", "struct_ptr.c", `void motor_init(Motor *m, uint16_t id) {
+    /* 传指针：① 函数能改调用者的结构体 ② 只拷 4/8 字节，不拷整个结构体 */
+    m->id   = id;
+    m->position = 0.0f;
+    m->integ = 0.0f;
+    /* p->field 是 (*p).field 的语法糖，箭头专门伺候结构体指针 */
+}
+
+Motor chassis[4];
+for (int i = 0; i < 4; i++)
+    motor_init(&chassis[i], 0x201 + i);`),
+        H.note("tip", "为什么永远传指针", "① 大结构体值拷贝又慢又费栈；② 传了指针才能就地修改（PID 更新电流反馈就是就地改）。规则：结构体超过 16 字节一律传指针，小的（如坐标点）可以传值。"),
+        H.sub("内存对齐：为什么 sizeof 会「变大」"),
+        H.code("c", "alignment.c", `struct A {
+    char  c;    /* 1 字节 */
+    int   i;    /* 4 字节 */
+    char  d;    /* 1 字节 */
+};              /* sizeof = 12！不是 6 */
+
+/* 内存布局（4 字节对齐）：
+ * [c][pad pad pad][i i i i][d][pad pad pad]
+ *  int 必须从 4 的倍数地址开始 → c 后面垫 3 字节
+ *  结构体总大小要是最大成员对齐数的倍数 → 末尾再垫 3 字节
+ */
+
+struct B {
+    int   i;    /* 4 */
+    char  c;    /* 1 */
+    char  d;    /* 1 */
+};              /* sizeof = 8，省了 4 字节！小成员打包排后面 */
+
+/* 通信协议/CAN 数据结构：按"大成员在前"排序，省内存又提缓存命中 */`),
+        H.sub("柔性数组与链表节点（结构体的进阶应用）"),
+        H.code("c", "linked_list.c", `typedef struct Node {
+    int val;
+    struct Node *next;    /* 自引用：指向同类型 */
+} Node;
+
+/* 头插法：链表插入只需改两个指针，O(1) */
+Node *push_front(Node *head, int val) {
+    Node *n = malloc(sizeof(Node));
+    if (!n) return head;
+    n->val = val;
+    n->next = head;
+    return n;             /* 新节点成为头 */
+}
+
+void list_free(Node *head) {
+    while (head) {
+        Node *nx = head->next;   /* 先存下一个，再 free 当前 */
+        free(head);
+        head = nx;
+    }
+}`),
+        H.quiz({
+          q: "为什么结构体传参推荐传指针而不是传值？",
+          tag: "随堂测",
+          opts: ["指针写起来短", "避免整个结构体被拷贝，且函数能修改原数据", "C 语言不允许结构体传值", "传值会内存泄漏"],
+          ans: 1,
+          explain: "两个理由：性能（不拷贝整块数据）+ 语义（能就地修改）。嵌入式里 PID 更新、电机控制全是传结构体指针。"
+        }),
+        H.prac({
+          id: "c-p6", level: 2, title: "手写：学生成绩结构体统计",
+          body: "定义 <code class='inline'>typedef struct { char name[16]; int score; } Student;</code> 手写两个函数：<code class='inline'>float avg_score(const Student *s, int n)</code> 求平均分；<code class='inline'>Student *find_top(const Student *s, int n)</code> 返回最高分学生的<b>指针</b>（不许拷贝结构体）。",
+          hint: "find_top 里记「当前最高分的下标」，最后返回 s+idx。",
+          solution: H.code("c", "student.c", `typedef struct { char name[16]; int score; } Student;
+
+float avg_score(const Student *s, int n) {
+    if (n <= 0) return 0.0f;
+    int sum = 0;
+    for (int i = 0; i < n; i++) sum += s[i].score;   /* 或 (s+i)->score */
+    return (float)sum / n;
+}
+
+Student *find_top(const Student *s, int n) {
+    if (n <= 0) return NULL;
+    int best = 0;
+    for (int i = 1; i < n; i++)
+        if (s[i].score > s[best].score) best = i;
+    return (Student *)(s + best);    /* 返回指向最高分学生的指针 */
+}`)
+        }),
+      ]},
+      { id: "c-file", title: "第 11 章 文件 IO（数据落盘）", blocks: [
+        H.sub("打开→读写→关闭，三段式"),
+        H.code("c", "file_io.c", `#include <stdio.h>
+
+int save_log(void) {
+    FILE *f = fopen("run.log", "a");     /* a=追加 w=覆盖 r=只读 */
+    if (!f) {                            /* 打开可能失败，必须查 */
+        perror("fopen");                 /* 自动打印 errno 对应的原因 */
+        return -1;
+    }
+    fprintf(f, "tick: pos=%.3f vel=%.3f\\n", 1.2f, 0.5f);
+    fclose(f);                           /* 不关 = 数据可能丢在缓冲区 */
+    return 0;
+}`),
+        H.sub("二进制读写：存传感器数据"),
+        H.code("c", "binary_io.c", `typedef struct { float pos; float vel; } Sample;
+
+int save_samples(const char *path, const Sample *s, size_t n) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    size_t w = fwrite(s, sizeof(Sample), n, f);   /* 返回成功写入的"块数" */
+    fclose(f);
+    return (w == n) ? 0 : -1;
+}
+
+/* 调试时把整段轨迹 dump 成文件，用 Python/MATLAB 画图分析——
+ * 这是视觉/电控联调的标准动作 */`),
+        H.note("warn", "结构体直接 fwrite 的坑", "结构体有内存对齐的 padding 字节，且不同编译器/平台布局可能不同。<b>自己程序存自己读没问题；跨平台交换数据请逐字段打包</b>（比如 CAN 报文那样手动拼接字节）。"),
+      ]},
+      { id: "c-preproc", title: "第 12 章 预处理器（编译前的文本替换机）", blocks: [
+        H.sub("三大指令：#define / #include / #if"),
+        H.code("c", "preprocessor.c", `#define PI 3.14159265f
+#define SQUARE(x) ((x) * (x))     /* 宏参数必须加括号！ */
+#define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+
+/* 条件编译：一份代码适配多个车型 */
+#define ROBOT_TYPE 2
+#if ROBOT_TYPE == 1
+  #define CHASSIS_MOTOR_NUM 4
+#elif ROBOT_TYPE == 2
+  #define CHASSIS_MOTOR_NUM 3     /* 三轮全向 */
+#else
+  #error "未知车型"                /* 直接编译报错，防止配置错误悄悄溜过 */
+#endif
+
+#ifndef MATH_UTILS_H               /* 头文件保护（配合 #endif 结尾） */
+#define MATH_UTILS_H
+#endif`),
+        H.note("pitfall", "宏的两大地雷", "① <code class='inline'>#define SQ(x) x*x</code>，用 <code class='inline'>SQ(1+2)</code> 会展开成 <code class='inline'>1+2*1+2</code>=5 而不是 9。参数和整体都要套括号。② 宏没有类型检查，是纯粹的文本替换。C++ 里能用 constexpr 就别用宏。"),
+        H.sub("工程必用的几个保留宏"),
+        H.table("保留宏速查", ["宏", "展开结果"], [
+          ["__FILE__", "当前源文件名（打日志定位用）"],
+          ["__LINE__", "当前行号"],
+          ["__DATE__ / __TIME__", "编译日期/时间（固件版本号神器）"],
+          ["#pragma once", "主流写法的头文件保护（等价#ifndef那三行）"]
+        ]),
+        H.code("c", "debug_macro.c", `/* 自定义调试日志宏：调试版打印并带文件行号，发布版一行代码都不剩 */
+#ifdef DEBUG
+  #define LOG(fmt, ...) \\
+      fprintf(stderr, "[%s:%d] " fmt "\\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#else
+  #define LOG(fmt, ...) ((void)0)    /* 编译后完全消失，零开销 */
+#endif`),
+      ]},
+      { id: "c-debug", title: "第 13 章 调试（printf 是工人，GDB 是工程师）", blocks: [
+        H.sub("printf 调试法：快但脏"),
+        H.code("c", "printf_debug.c", `/* 定位"到底执行到哪一步挂了"——在最可疑的位置撒标记 */
+printf("[DBG] step1: before parse\\n"); fflush(stdout);   /* fflush 立刻刷出去，防止崩溃时日志还在缓冲区 */
+/* ... 可疑代码 ... */
+printf("[DBG] step2: after parse\\n"); fflush(stdout);`),
+        H.sub("GDB 十分钟速成"),
+        H.code("bash", "gdb 速查", `gcc -g main.c -o main      # 先带 -g 编译
+gdb ./main                # 进入 gdb
+
+break main                # 断点（可简写 b main / b 文件名:行号）
+run                       # 跑起来（r）
+next                      # 单步不进函数（n）
+step                      # 单步进函数（s）
+print p                   # 打印变量（p *ptr 打解引用、p arr@5 打前5个元素）
+bt                        # 崩溃后看调用栈（backtrace）——崩溃排障第一命令！
+watch x                   # 监视变量，谁改了它立刻停 —— 抓"数据莫名被改"的神器
+continue                  # 继续到下一断点（c）
+quit                      # 退出`),
+        H.note("master", "师父的排障三步", "① <b>复现</b>：找到稳定复现的路径，不能复现的 bug 先想办法复现；② <b>缩小</b>：二分注释/断点，把问题逼到最小范围；③ <b>假设-验证</b>：提出一个能解释所有现象的假设，再设计实验验证。别瞎改代码碰运气——那是买彩票。"),
+        H.prac({
+          id: "c-p7", level: 1, title: "手写：找 bug 之指针篇",
+          body: "下面这段代码有 <b>3 处</b>错误，手写在纸上圈出来并说明每处的后果和修法：<br><code class='inline'>int* p; *p = 10; int a[2] = {1,2}; p = a; p[2] = 5; free(p);</code>",
+          hint: "分别对应：未初始化、越界、对非堆内存 free。",
+          solution: H.code("text", "答案", `错误1: int* p; *p = 10;
+  → 未初始化的野指针直接解引用，写入随机地址。
+  修法: int* p = NULL;（并先让 p 指向合法内存再写）
+
+错误2: p = a; p[2] = 5;
+  → a 只有 2 个元素，p[2] 越界写。
+  修法: 合法下标 0~1。
+
+错误3: free(p);
+  → p 指向栈上数组 a，free 只能释放 malloc/realloc 的堆内存，
+     对非堆指针 free 是未定义行为（大概率立刻崩）。
+  修法: 删掉这行。`)
+        }),
+      ]},
+      { id: "c-advanced", title: "第 14 章 高级主题（位运算与可变参数）", blocks: [
+        H.sub("位运算：嵌入式的日常"),
+        H.p("寄存器操作、CAN 报文打包、协议编解码，全是位运算。这六招必须形成肌肉记忆："),
+        H.table("位运算六招", ["操作", "写法", "用途"], [
+          ["置位", "reg |= (1<<3)", "把第 3 位置 1（开某个功能）"],
+          ["清位", "reg &= ~(1<<3)", "把第 3 位清 0（关功能）"],
+          ["翻位", "reg ^= (1<<3)", "取反（LED 闪烁）"],
+          ["测位", "if (reg & (1<<3))", "查第 3 位是 0 是 1"],
+          ["取低 n 位", "x & 0xFF", "截取字节"],
+          ["拼字节", "(hi<<8)|lo", "两个 8 位拼成 16 位"]
+        ]),
+        H.code("c", "can_pack.c", `/* 大疆电机反馈报文就是 8 字节 CAN 帧，解包全靠位运算 */
+static inline int16_t can_to_i16(uint8_t hi, uint8_t lo) {
+    return (int16_t)((hi << 8) | lo);       /* 高字节在前拼 16 位 */
+}
+
+static inline float raw_to_rpm(int16_t raw) {
+    return raw * 0.732421875f;              /* M3508: rpm = raw * (60/16384*200) 的简化系数 */
+}
+
+void motor_decode(const uint8_t data[8], Motor *m) {
+    m->position = (float)can_to_i16(data[0], data[1]) * 0.000766990f;  /* 机械角 */
+    m->speed    = raw_to_rpm(can_to_i16(data[2], data[3]));
+    m->current  = (float)can_to_i16(data[4], data[5]);                 /* 转矩电流 */
+}`),
+        H.sub("可变参数：printf 的秘密"),
+        H.code("c", "varargs.c", `#include <stdarg.h>
+
+/* 自己实现一个 log_error("code %d at %s", code, file) */
+void log_error(const char *fmt, ...) {
+    va_list ap;                   /* 参数背包 */
+    va_start(ap, fmt);            /* 从 fmt 之后开始装 */
+    vfprintf(stderr, fmt, ap);    /* v 系列函数接收 va_list */
+    fprintf(stderr, "\\n");
+    va_end(ap);                   /* 收背包 */
+}`),
+      ]},
+      { id: "c-standard", title: "第 15 章 写出工业级 C 代码的规范", blocks: [
+        H.sub("师父的代码规范（战壕里总结的）"),
+        H.ul([
+          "<b>头文件保护 + 前置声明</b>：每个 .h 都有 <code class='inline'>#pragma once</code> 或 #ifndef 三件套。",
+          "<b>最小暴露原则</b>：只把别人要用的放进 .h，其余全 static 藏在 .c 里。",
+          "<b>初始化一切</b>：局部变量定义时给初值，尤其指针给 NULL。",
+          "<b>const 能加就加</b>：函数不修改的指针参数一律 <code class='inline'>const T*</code>，让编译器帮你抓误写。",
+          "<b>零警告编译</b>：-Wall -Wextra -Werror 上了战场。",
+          "<b>防御式返回</b>：所有可能失败的操作（malloc/fopen/接收数据）都检查返回值。",
+          "<b>sizeof(type) 而不是数字</b>：<code class='inline'>malloc(sizeof(Motor))</code> 而不是 malloc(24)。类型改了不会炸。"
+        ]),
+        H.sub("一个完整的工业风模块长什么样"),
+        H.code("c", "pid.h", `#pragma once
+#include <stdint.h>
+
+typedef struct {
+    float kp, ki, kd;
+    float integ;        /* 积分累加 */
+    float prev_err;     /* 上次误差（算微分用） */
+    float out_limit;    /* 输出限幅 */
+    float integ_limit;  /* 积分限幅：抗饱和 */
+} Pid;
+
+void  pid_init(Pid *p, float kp, float ki, float kd,
+               float out_limit, float integ_limit);
+float pid_calc(Pid *p, float target, float feedback);`),
+        H.code("c", "pid.c", `#include "pid.h"
+
+void pid_init(Pid *p, float kp, float ki, float kd,
+              float out_limit, float integ_limit) {
+    /* 参数检查：工业代码的第一行永远是防御 */
+    if (!p) return;
+    p->kp = kp; p->ki = ki; p->kd = kd;
+    p->integ = 0.0f; p->prev_err = 0.0f;
+    p->out_limit = out_limit;
+    p->integ_limit = integ_limit;
+}
+
+float pid_calc(Pid *p, float target, float feedback) {
+    if (!p) return 0.0f;
+
+    float err = target - feedback;
+
+    /* 积分限幅（抗积分饱和） */
+    p->integ += err;
+    if (p->integ >  p->integ_limit) p->integ =  p->integ_limit;
+    if (p->integ < -p->integ_limit) p->integ = -p->integ_limit;
+
+    float deriv = err - p->prev_err;
+    p->prev_err = err;
+
+    float out = p->kp * err + p->ki * p->integ + p->kd * deriv;
+
+    /* 输出限幅 */
+    if (out >  p->out_limit) out =  p->out_limit;
+    if (out < -p->out_limit) out = -p->out_limit;
+    return out;
+}`),
+        H.note("master", "结课测验", "这个 PID 模块你现在应该<b>每一行都看得懂</b>：结构体指针传参、const、防御式检查、限幅抗饱和。看不懂哪行，就回到对应章节重学。什么时候能默写出这个模块，什么时候算 C 语言出师。"),
+        H.prac({
+          id: "c-p8", level: 3, title: "终极手写：默写 PID 模块",
+          body: "合上网页，白纸默写 pid.h + pid.c 完整模块（含积分限幅和输出限幅）。写完逐行对照。这是电控组的入门门槛题。",
+          hint: "结构：typedef struct 6 字段 → init 函数 → calc 函数（err→积分→微分→合成→限幅）。",
+          solution: H.code("text", "自评标准", `满分标准（对照官方实现逐项打分）：
+□ 头文件有 #pragma once 和完整的类型定义
+□ init 函数有 if(!p) return 防御
+□ calc 函数顺序正确：误差 → 积分(带限幅) → 微分 → 合成 → 输出限幅
+□ 所有 float 字面量带 f 后缀
+□ 指针参数用 const 或非 const 区分了读写意图
+□ 一遍编译通过、零警告
+6 项全勾 = 练会；任何一项没勾，明天重默。`)
+        }),
+      ]},
+    ]},
+  ]
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>手写练习中心 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+<style>
+  /* ---------- 练习中心专属 ---------- */
+  .prac-toolbar { position: sticky; top: var(--topbar-h); z-index: 50; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); padding: 14px 0 12px; border-bottom: 1px solid var(--border-soft); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .prac-toolbar select, .prac-toolbar input {
+    background: var(--bg-card); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 12px; border-radius: 9px; font-size: 14px; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .prac-toolbar select:focus, .prac-toolbar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(63,155,255,.15); }
+  .prac-toolbar input { width: 220px; }
+  .prac-toolbar .btn { padding: 8px 14px; }
+  .prac-toolbar .spacer { flex: 1; }
+  .prac-count { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+
+  .prac-dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 20px 0 18px; }
+  .pd-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .pd-card .pd-ico { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; flex: none; background: rgba(63,155,255,.12); }
+  .pd-card .pd-num { font-size: 24px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .pd-card .pd-lbl { font-size: 12px; color: var(--text-dim); }
+  .pd-card.g .pd-ico { background: rgba(63,214,140,.12); }
+  .pd-card.o .pd-ico { background: rgba(255,138,61,.12); }
+  .pd-card.p .pd-ico { background: rgba(180,139,255,.12); }
+
+  .feat-sep { display: flex; align-items: center; gap: 10px; margin: 34px 0 14px; color: var(--yellow); font-size: 14px; font-weight: 700; letter-spacing: 1px; }
+  .feat-sep::before, .feat-sep::after { content: ""; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,204,85,.4), transparent); flex: 1; }
+  .feat-sep .star { font-size: 16px; }
+
+  .practice.premium-feat { border-color: rgba(255,204,85,.45); background: linear-gradient(180deg, rgba(255,204,85,.05), transparent 60%), var(--bg-card); }
+  .practice.premium-feat .p-title::after { content: "★ 精选"; font-size: 11px; font-weight: 700; color: var(--yellow); background: rgba(255,204,85,.12); border: 1px solid rgba(255,204,85,.3); border-radius: 999px; padding: 2px 8px; margin-left: 10px; vertical-align: 2px; letter-spacing: .5px; }
+
+  .empty-state { text-align: center; padding: 70px 20px; color: var(--text-dim); border: 1px dashed var(--border); border-radius: var(--radius); margin-top: 20px; }
+  .empty-state .big { font-size: 40px; margin-bottom: 10px; }
+
+  @media (max-width: 720px) {
+    .prac-toolbar { position: static; }
+    .prac-toolbar input { width: 100%; }
+  }
+</style>
+</head>
+<body data-page="practice">
+<div class="layout"><main class="content">
+
+  <div class="crumb">RM 兵工厂 / 手写练习中心</div>
+  <h1 style="font-size:30px;font-weight:800;">手写练习中心 <span class="lang-badge">769 题</span></h1>
+  <p class="dim" style="max-width:760px;margin-top:10px;">
+    全站手写题都在这儿，按语言/难度/精选筛选。规矩不变：<b>先自己写，写完再对答案</b>。
+    标 ★ 的是师父挑的精选好题——一个模块 15 道以上，闭着眼练完这批，该模块基础就扎实了。
+    练会的题打勾，进度自动存本机。
+  </p>
+
+  <div class="prac-dash">
+    <div class="pd-card"><div class="pd-ico">📚</div><div><div class="pd-num" id="st-total">0</div><div class="pd-lbl">总题数</div></div></div>
+    <div class="pd-card g"><div class="pd-ico">✅</div><div><div class="pd-num" id="st-done">0</div><div class="pd-lbl">已练会</div></div></div>
+    <div class="pd-card"><div class="pd-ico">📈</div><div><div class="pd-num" id="st-pct">0%</div><div class="pd-lbl">完成度</div></div></div>
+    <div class="pd-card o"><div class="pd-ico">⭐</div><div><div class="pd-num" id="st-feat">0</div><div class="pd-lbl">精选已练</div></div></div>
+    <div class="pd-card p"><div class="pd-ico">🔥</div><div><div class="pd-num" id="st-today">0</div><div class="pd-lbl">今日练会</div></div></div>
+    <div class="pd-card o"><div class="pd-ico">📅</div><div><div class="pd-num" id="st-streak">0</div><div class="pd-lbl">连续打卡(天)</div></div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 18px;">
+    <div class="quiz-stat" id="quizPanel">
+      <div class="qs-head"><b>📝 随堂测战绩</b><span id="qs-pct">0%</span></div>
+      <div class="qs-bar"><div id="qs-bar" style="width:0%"></div></div>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:8px;" id="qs-detail">还没做过随堂测</p>
+    </div>
+    <div class="quiz-stat">
+      <div class="qs-head"><b>🔥 最近 14 天练题打卡</b><span class="streak-num" id="streak-num">0</span></div>
+      <div class="streak-bar" id="streakBar"></div>
+    </div>
+  </div>
+
+  <div class="prac-toolbar">
+    <select id="filterLang" aria-label="筛选语言">
+      <option value="all">全部语言</option>
+      <option value="c">C 语言</option>
+      <option value="cpp">C++</option>
+      <option value="py">Python</option>
+      <option value="lx">Linux</option>
+      <option value="ros">ROS 2</option>
+      <option value="rme">RM 电控</option>
+      <option value="rmv">RM 视觉</option>
+      <option value="cvp">OpenCV</option>
+      <option value="dlv">YOLO</option>
+      <option value="cva">控制进阶</option>
+      <option value="ossv">开源·视觉</option>
+      <option value="osse">开源·电控</option>
+    </select>
+    <select id="filterLevel" aria-label="筛选难度">
+      <option value="all">全部难度</option>
+      <option value="1">入门</option>
+      <option value="2">进阶</option>
+      <option value="3">实战</option>
+    </select>
+    <select id="filterFeat">
+      <option value="all">全部题目</option>
+      <option value="feat">★ 只看精选</option>
+    </select>
+    <input type="text" id="searchBox" placeholder="搜索题目关键词…" aria-label="搜索题目">
+    <div class="spacer"></div>
+    <button class="btn" id="btnRandom" type="button">🎲 随机抽题</button>
+    <button class="btn" id="btnPrint" type="button">🖨 打印卷子</button>
+  </div>
+
+  <div id="featSection"></div>
+  <div id="practiceGrid" class="prac-list"></div>
+  <div class="empty-state" id="emptyState" style="display:none">
+    <div class="big">🔍</div>
+    <p>没有匹配的题目。换个筛选条件试试。</p>
+  </div>
+
+  <div class="next-chapter">
+    <a class="btn" href="index.html">← 返回首页</a>
+    <a class="btn primary" href="help.html">使用说明书 →</a>
+  </div>
+
+</main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script src="assets/js/practice-db.js"></script>
+<script src="assets/js/practice-db-b.js"></script>
+<script src="assets/js/practice-db-c.js"></script>
+<script src="assets/js/practice-db-d.js"></script>
+<script src="assets/js/practice-db-e.js"></script>
+<script src="assets/js/practice-db-f.js"></script>
+<script src="assets/js/practice-db-g.js"></script>
+<script src="assets/js/practice-db-h.js"></script>
+<script src="assets/js/practice-db-i.js"></script>
+<script src="assets/js/practice-db-j.js"></script>
+<script src="assets/js/practice-db-k.js"></script>
+<script src="assets/js/practice-db-l.js"></script>
+<script src="assets/js/practice-db-m.js"></script>
+<script src="assets/js/practice-db-n.js"></script>
+<script src="assets/js/practice-db-o.js"></script>
+<script src="assets/js/practice-db-lx.js"></script>
+<script src="assets/js/practice-db-lxb.js"></script>
+<script src="assets/js/practice-db-lxc.js"></script>
+<script src="assets/js/practice-db-cv.js"></script>
+<script src="assets/js/practice-db-cvb.js"></script>
+<script src="assets/js/practice-db-cvc.js"></script>
+<script src="assets/js/practice-db-cva.js"></script>
+<script src="assets/js/practice-db-cvab.js"></script>
+<script src="assets/js/practice-db-ossv.js"></script>
+<script src="assets/js/practice-db-osse.js"></script>
+<script src="assets/js/practice-db-ossm.js"></script>
+<script src="assets/js/practice-db-dla.js"></script>
+<script src="assets/js/practice-db-dlb.js"></script>
+<script src="assets/js/practice-db-dlc.js"></script>
+<script src="assets/js/practice-center.js"></script>
+</body>
+</html>

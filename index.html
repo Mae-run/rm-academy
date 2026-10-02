@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>RM 兵工厂 · 首页</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="home">
+<div class="layout">
+<main class="content">
+
+  <div class="hero">
+    <div class="hero-badge">十年老兵 · 退休前最后一课</div>
+    <h1>RM 兵工厂</h1>
+    <p class="hero-sub">从 C 到 C++ / Python / Linux / ROS 2，再到电控、视觉、OpenCV / YOLO 深度学习实战。师父带路，题目管够——<b>所有代码必须手敲，所有练习必须手写</b>。</p>
+    <div class="hero-actions">
+      <a class="btn primary" href="c.html">从 C 语言开始 →</a>
+      <a class="btn" href="practice.html">去练习中心</a>
+      <a class="btn" href="#roadmap">看学习路线</a>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="stat-card"><div class="num" id="stat-chapters">0/0</div><div class="lbl">章节已学</div></div>
+    <div class="stat-card"><div class="num" id="stat-practices">0/0</div><div class="lbl">已练会</div></div>
+    <div class="stat-card"><div class="num">10</div><div class="lbl">课程模块</div></div>
+    <div class="stat-card"><div class="num">1379</div><div class="lbl">手写题</div></div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar"><div id="global-progress" style="width:0%"></div></div>
+    <div class="progress-label"><span id="global-progress-label">总进度：0 / 0 章</span><span></span></div>
+  </div>
+
+  <div class="section-title" id="courses">课程阵地</div>
+  <div class="section-sub">十大阵地，按顺序推进。每个阵地都有自己的练习题，别跳着学。</div>
+  <div class="card-grid">
+
+    <a class="course-card" href="c.html">
+      <div class="cc-icon c">C</div>
+      <h3>C 语言 —— 硬件世界的母语</h3>
+      <p>你是从这儿来的，但只学了一半。指针、内存、结构体这些"硬骨头"在这儿补齐——它们是电控的心脏。</p>
+      <div class="cc-meta">15 章 · 154 道手写题（16 精选）</div>
+    </a>
+
+    <a class="course-card" href="cpp.html">
+      <div class="cc-icon cpp">C++</div>
+      <h3>C++ —— 给 C 装上重武器</h3>
+      <p>全程用 C 类比：引用 vs 指针、string vs char*、vector vs 数组、类 vs 结构体、RAII vs malloc/free。</p>
+      <div class="cc-meta">17 章 · 129 道手写题（15 精选）</div>
+    </a>
+
+    <a class="course-card" href="python.html">
+      <div class="cc-icon py">Py</div>
+      <h3>Python —— 快速侦察兵</h3>
+      <p>算法验证、视觉原型、调试工具。和 C 对照着学：动态类型、列表切片、字典、NumPy 数组 vs C 数组。</p>
+      <div class="cc-meta">15 章 · 126 道手写题（18 精选）</div>
+    </a>
+
+    <a class="course-card" href="linux.html">
+      <div class="cc-icon lx">Lx</div>
+      <h3>Linux —— 嵌入式第二母语</h3>
+      <p>命令行生存、文本三剑客、Shell 脚本、git/cmake/gdb 工具链、SSH 部署、交叉编译与 systemd 守护。视觉部署的命根。</p>
+      <div class="cc-meta">15 章 · 120 道手写题（27 精选）</div>
+    </a>
+
+    <a class="course-card" href="ros2.html">
+      <div class="cc-icon ros">ROS2</div>
+      <h3>ROS 2 —— 机器人通信骨架</h3>
+      <p>节点、话题、服务、TF、自定义消息、launch、与 OpenCV 共舞。视觉组的主战场。</p>
+      <div class="cc-meta">14 章 · 120 道手写题（25 精选）</div>
+    </a>
+
+    <a class="course-card" href="rm-embedded.html">
+      <div class="cc-icon rm">RM·E</div>
+      <h3>RM 电控组实战</h3>
+      <div class="cc-meta">15 章 · 120 道手写题（31 精选）</div>
+    </a>
+    <a class="course-card" href="rm-control.html">
+      <div class="cc-icon ros">Ct</div>
+      <h3>控制进阶 —— 从调参到设计</h3>
+      <p>传递函数、前馈补偿、串级 PID、LQR 最优控制、IMU 融合、弹道解算工程化、安全保护——强队与普通队的分水岭。</p>
+      <div class="cc-meta">10 章 · 120 道手写题（28 精选）</div>
+    </a>
+
+    <a class="course-card" href="rm-vision.html">
+      <div class="cc-icon rm">RM·V</div>
+      <h3>RM 视觉组实战</h3>
+      <div class="cc-meta">15 章 · 120 道手写题（38 精选）</div>
+    </a>
+    <a class="course-card" href="rm-opencv.html">
+      <div class="cc-icon lx">Cv</div>
+      <h3>OpenCV —— 从像素到装甲板</h3>
+      <p>像素矩阵、ROI、HSV 二值化、形态学、轮廓筛选、透视校正、特征匹配、视频管线、相机标定——传统视觉的看家本领。</p>
+      <div class="cc-meta">10 章 · 120 道手写题（23 精选）</div>
+    </a>
+    <a class="course-card" href="rm-dl.html">
+      <div class="cc-icon rm">DL</div>
+      <h3>YOLO —— 深度学习检测</h3>
+      <p>神经网络直觉、数据采集标注、训练调参、ONNX 导出、TensorRT C++ 部署、ByteTrack 跟踪、能量机关正弦预测——2026 赛场主流打法。</p>
+      <div class="cc-meta">10 章 · 120 道手写题（30 精选）</div>
+    </a>
+    <a class="course-card" href="oss.html">
+      <div class="cc-icon cv">📦</div>
+      <h3>开源项目地图</h3>
+      <div class="cc-meta">视觉 7 · 电控 4 · 合集 2 · 师父亲验</div>
+    </a>
+
+  </div>
+
+  <div class="section-title" id="roadmap">总学习路线（师父排的兵期）</div>
+  <div class="section-sub">按周推进，每周 10~14 小时。卡住超过两天，就回来重新看路线——不是你笨，是顺序错了。</div>
+
+  <div class="roadmap-track">
+    <div class="phase">
+      <div class="ph-week">第 1~4 周</div>
+      <h3>C 语言补课（指针重火力）</h3>
+      <p>你已会基础语法，直接从指针开火：指针基础 → 二级指针 → 指针与数组/函数 → 内存模型 → 结构体传参 → 文件与调试。每天手写 2~3 道指针题。</p>
+      <div class="ph-goals"><span>指针四则运算</span><span>指针与数组等价性</span><span>malloc/free</span><span>函数指针</span><span>结构体内存对齐</span></div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-week">第 5~8 周</div>
+      <h3>C++（C 的超集，先学增量）</h3>
+      <p>只学 C 没有的：引用、函数重载、默认参数、string/vector、类与 RAII、智能指针、模板、lambda、STL 算法、多线程。全程和 C 对照。</p>
+      <div class="ph-goals"><span>引用 vs 指针</span><span>vector vs 数组</span><span>RAII</span><span>unique_ptr</span><span>lambda</span></div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-week">第 9~11 周</div>
+      <h3>Python（一周上手，两周熟练）</h3>
+      <p>用 C 的脑子学 Python：类型是贴在值上的标签、列表是动态数组、字典是哈希表、切片是指针算术的糖。重点练 NumPy 向量化思维。</p>
+      <div class="ph-goals"><span>列表推导式</span><span>字典</span><span>NumPy 广播</span><span>matplotlib 画图</span></div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-week">第 11~12 周</div>
+      <h3>Linux（嵌入式第二母语）</h3>
+      <p>命令行生存 → 文本三剑客 → Shell 脚本 → git 版本控制 → cmake 构建 → gdb 调试 → ssh 部署 → 交叉编译 + systemd 守护。和 ROS 2 同步穿插着学。</p>
+      <div class="ph-goals"><span>Shell 脚本</span><span>git 协作</span><span>gdb 排错</span><span>ssh 部署</span><span>systemd</span></div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-week">第 13~16 周</div>
+      <h3>ROS 2（Humble）</h3>
+      <p>节点/话题/服务三件套，自定义消息，TF 坐标变换，launch 启动，cv_bridge + OpenCV，最后做一个"图像传输 + 处理"的最小视觉系统。</p>
+      <div class="ph-goals"><span>rclcpp 节点</span><span>自定义 msg</span><span>TF2</span><span>launch</span><span>cv_bridge</span></div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-week">第 16~22 周</div>
+      <h3>RM 电控 + 视觉 双线实战</h3>
+      <p>电控：C 板开发环境 → FreeRTOS 任务划分 → CAN 通信 → 大疆电机驱动与 PID → IMU 姿态 → 遥控器 → 发射控制 → 安全联锁。视觉：流水线 → 装甲板检测 → PnP → 坐标系 → EKF 预测 → 实机联调。</p>
+      <div class="ph-goals"><span>M3508 PID 整定</span><span>IMU 姿态解算</span><span>装甲板检测</span><span>PnP 位姿</span><span>弹道预测</span></div>
+    </div>
+
+    <div class="phase">
+      <div class="ph-week">第 23 周起</div>
+      <h3>赛季实盘</h3>
+      <p>每天刷练习中心，每周复盘错题。上机调车、打模拟赛。师父退休后，这些章节就是你的师父。</p>
+      <div class="ph-goals"><span>实车联调</span><span>模拟赛</span><span>复盘文化</span></div>
+    </div>
+  </div>
+
+  <div class="section-title">铁律（师父的三条规矩）</div>
+  <ul class="list">
+    <li><b>代码必须手敲。</b>复制粘贴学不会编程，就像看别人健身练不出肌肉。教程里的每段代码都要自己敲一遍、跑一遍、改错一遍。</li>
+    <li><b>练习必须手写。</b>每章配手写题（纸上写或白板写），写完对照参考答案。手写强迫你想清楚每一个分号和边界。</li>
+    <li><b>错题必须复盘。</b>用练习中心的自评标记，练会的打勾，没练会的第二天重写。写不出参考答案水平的代码，就不算练会。</li>
+  </ul>
+
+  <div class="note master">
+    <div class="note-title">师父的话</div>
+    <p>嵌入式和机器视觉这行，靠的不是天赋，是<b>手上的肌肉记忆和脑子里的内存模型</b>。你现在觉得指针难，是因为你还没把它画在纸上；你觉得 EKF 难，是因为你还没把它一行行推过。这站上的每一道题，都是我十年里踩过的坑。把它们练完，你就能独当一面了。</p>
+  </div>
+
+  <footer class="site-footer">RM 兵工厂 · 学员训练站 —— 静态站点，可离线使用。数据保存在本机浏览器。</footer>
+</main>
+</div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+PAGE_ONLOAD = function () { refreshGlobalStats(); };
+document.addEventListener("click", refreshGlobalStats);
+</script>
+</body>
+</html>

@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>Linux · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="linux">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "linux",
+  title: "Linux",
+  badge: "SYS",
+  crumb: "Linux · 命令行到部署",
+  lead: "视觉主机跑 Ubuntu，部署走 ssh，构建用 cmake，排错靠 gdb，版本归 git——<b>这些全是 Linux 的活</b>。这门课不通，ROS 2 和视觉部署就是纸上谈兵。<b>每一章都有随堂测和手写题，命令要亲手敲，脚本要亲手写。</b>",
+  prev: { href: "python.html", label: "Python" },
+  next: { href: "ros2.html", label: "ROS 2" },
+
+  stages: [
+    { id: "stage-lx-1", title: "第一阶段 · 起步与环境", chapters: [
+      { id: "lx-why", title: "第 1 章 为什么要会 Linux（嵌入式视角）", blocks: [
+        H.sub("机器人的大脑，跑的全是 Linux"),
+        H.p("RM 场上的视觉主机跑的是 Ubuntu；电控的交叉编译工具链跑在 Linux；ROS 2 官方支持最好的平台是 Ubuntu LTS。你绕不开它——早点面对，早点受益。"),
+        H.ul([
+          "<b>视觉部署</b>：相机驱动、OpenCV、CUDA 全在 Linux 上，Windows 跑不了真正的机器人视觉",
+          "<b>开发工具链</b>：arm-none-eabi-gcc 交叉编译、SSH 远程开发、串口调试",
+          "<b>服务器常识</b>：队里的 Git 服务器、CI 机器、rosbag 存储盘，全靠 Linux 运维"
+        ]),
+        H.sub("师父排的路线：命令行 → 文本 → 脚本 → 工具链"),
+        H.p("师父排的顺序：<b>先命令行生存，再文本三剑客，再写 Shell 脚本，最后上工具链（git/cmake/gdb/交叉编译）</b>。每一步都配手写题，不许跳。"),
+        H.note("master", "师父规矩", "从今天起，开发主战场切到 Linux（WSL2 也算）。<b>凡是有图形界面能做的事，先想想命令行怎么做。</b>图形界面是给用户的，命令行是给工程师的。"),
+        H.quiz({
+          q: "RM 视觉组的主力开发平台是什么？",
+          tag: "随堂测",
+          opts: ["Windows 11 + Visual Studio", "Ubuntu（Linux）", "macOS", "Android"],
+          ans: 1,
+          explain: "相机驱动、ROS 2、CUDA 的完整支持都在 Ubuntu 上。装 WSL2 或双系统是视觉组新人的第一件事。"
+        }),
+      ]},
+      { id: "lx-setup", title: "第 2 章 环境搭建：WSL2 / 虚拟机 / 双系统", blocks: [
+        H.sub("三条路，怎么选"),
+        H.table("三种 Linux 环境对比", ["方案", "适合谁", "优缺点"], [
+          ["<b>WSL2</b>", "Windows 主力 + 顺手学 Linux 的人", "五分钟装好、与 Windows 文件互通；但 GUI 和 USB 直通麻烦"],
+          ["<b>虚拟机</b>", "想完整体验桌面 Linux 的人", "系统完整可随便折腾；但吃内存、性能打折"],
+          ["<b>双系统</b>", "要跑 CUDA / 相机的视觉组正式成员", "性能满血、硬件直通；分区有风险，装前备份"]
+        ]),
+        H.sub("WSL2 五分钟装好"),
+        H.code("bash", "PowerShell（管理员）", `wsl --install -d Ubuntu-22.04
+# 重启后设置用户名密码，然后换国内源
+sudo sed -i 's|archive.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list
+sudo apt update && sudo apt upgrade -y`),
+        H.p("装完验证三件套："),
+        H.code("bash", "验证", `uname -a          # 内核版本
+gcc --version     # 编译器
+apt list --installed 2>/dev/null | grep build-essential   # 构建工具在不在`),
+        H.note("warn", "新手三个坑", "① WSL2 里别在 /mnt/c（Windows 盘）下编译——跨文件系统 IO 慢 5~10 倍，项目放 Linux 家目录；② sudo 密码忘了进恢复模式重置；③ 双系统装前一定备份，分区表搞坏是真会哭的。"),
+        H.quiz({
+          q: "WSL2 里编译大型 C++ 工程，项目放哪？",
+          tag: "随堂测",
+          opts: ["/mnt/c/Users/... （Windows 盘）", "~/projects（Linux 家目录）", "随便哪都一样", "/tmp"],
+          ans: 1,
+          explain: "/mnt/c 跨文件系统 IO 巨慢。项目放 Linux 原生目录；要用 Windows 的 VS Code 就装 WSL 扩展直接打开。"
+        }),
+        H.prac({
+          id: "linux-p1", level: 1, title: "手写：环境体检脚本",
+          body: "手写 check_env.sh：依次检查 gcc、g++、make、git、cmake 是否已安装（用 command -v），装了的打 [OK]，没装的打 [缺失]，最后统计缺了几个。",
+          hint: "command -v gcc >/dev/null 2>&1 && echo OK || echo 缺失；工具名写进 for 循环列表。",
+          solution: H.code("bash", "check_env.sh", `#!/bin/bash
+# 环境体检：检查开发工具是否齐全
+missing=0
+for tool in gcc g++ make git cmake; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        echo "[OK]   $tool -> $(command -v $tool)"
+    else
+        echo "[缺失] $tool"
+        missing=$((missing + 1))
+    fi
+done
+echo "----------------------------------"
+if [ "$missing" -eq 0 ]; then
+    echo "环境齐全，开工。"
+else
+    echo "还缺 $missing 个工具，先装："
+    echo "  sudo apt install build-essential git cmake"
+fi`)
+        }),
+      ]},
+      { id: "lx-cmd", title: "第 3 章 命令行生存六式", blocks: [
+        H.sub("先记住这六个命令，比记英语单词管用"),
+        H.table("生存六命令", ["命令", "作用", "高频用法"], [
+          ["pwd", "我在哪", "迷路了就敲它"],
+          ["ls", "这里有什么", "ls -lh 带大小看详情"],
+          ["cd", "去别处", "cd .. 回上级；cd ~ 回家；cd - 回上一次"],
+          ["mkdir", "建目录", "mkdir -p a/b/c 一路建到底"],
+          ["man", "查说明书", "man ls；q 退出；/ 搜索"],
+          ["history", "我刚才干了啥", "history | tail -20"]
+        ]),
+        H.sub("路径的两副面孔"),
+        H.p("绝对路径从根出发：/home/mae/code。相对路径从当前位置出发：./code、../code。分不清就 pwd 一下。"),
+        H.code("bash", "练手", `cd ~                # 回家
+mkdir -p rm_ws/src  # -p 连父目录一起建
+cd rm_ws
+pwd                 # /home/你的用户名/rm_ws
+ls -la              # -a 看隐藏文件（能看到 . 和 ..）`),
+        H.note("pitfall", "rm 的血泪", "rm -rf 没有回收站、没有撤销。<b>删之前先 ls 一遍同样的路径</b>，确认要删的就是它再下手。这是永远的规矩。"),
+        H.quiz({
+          q: "cd .. 是什么意思？",
+          tag: "随堂测",
+          opts: ["回到根目录 /", "回到上一级目录", "回到家目录", "回到上一次所在的目录"],
+          ans: 1,
+          explain: ".. 是上一级；/ 是根；家目录是 ~ 或不带参数的 cd；上一次的位置是 cd -。"
+        }),
+      ]},
+      { id: "lx-file", title: "第 4 章 文件操作与查找", blocks: [
+        H.sub("复制、移动、删除"),
+        H.code("bash", "三件套", `cp main.c main_backup.c        # 复制
+cp -r firmware/ firmware_bak/ # -r 递归复制整个目录
+mv old.c new.c                # 移动 = 重命名
+mv *.log logs/                # 把所有日志挪进 logs/
+rm -i draft.c                 # -i 每个都问一遍（新手保险）`),
+        H.sub("找文件：find 是万能的"),
+        H.code("bash", "find", `find . -name "*.cpp"                  # 当前目录下所有 cpp
+find /home -name "*.h" 2>/dev/null     # 全盘搜（没权限的目录不刷屏）
+find . -name "*.o"                     # 先跑一遍看列表
+find . -name "*.o" -delete             # 确认无误再加 -delete
+find . -size +10M                      # 大于 10MB 的文件`),
+        H.sub("看文件内容"),
+        H.code("bash", "cat / head / tail", `cat short.txt          # 整个倒出来（短的用）
+head -n 20 log.txt     # 前 20 行
+tail -f debug.log      # 实时跟踪日志滚动——调机器人必备
+less big.txt           # 分页看（q 退出 / 搜索 G 到底部）`),
+        H.note("master", "工程习惯", "编译产物（*.o、build/、*.pyc）不要提交到 git。git 章会写 .gitignore，现在先记住：<b>build 目录是垃圾桶，不是仓库。</b>"),
+        H.quiz({
+          q: "想实时看机器人日志滚动输出，用哪个？",
+          tag: "随堂测",
+          opts: ["cat debug.log", "head debug.log", "tail -f debug.log", "less debug.log"],
+          ans: 2,
+          explain: "tail -f 持续跟踪文件末尾新增内容，Ctrl+C 退出。看串口日志、看 ROS 输出全靠它。"
+        }),
+        H.prac({
+          id: "linux-p2", level: 1, title: "手写：工程清理脚本",
+          body: "手写 clean.sh：删除当前目录及子目录下所有 *.o、*.tmp 文件和 build/ 目录。删前打印每个将删除的路径，最后报告一共清理了多少项。",
+          hint: "find . \\( -name \"*.o\" -o -name \"*.tmp\" \\) 找文件；-type d -name build 找目录；先 -print 再删；用变量累计计数。",
+          solution: H.code("bash", "clean.sh", `#!/bin/bash
+# 工程清理：删除编译产物和临时文件
+count=0
+
+# 1. 找出所有 *.o / *.tmp 文件，逐个删并计数
+while IFS= read -r f; do
+    echo "删文件: $f"
+    rm -f "$f"
+    count=$((count + 1))
+done < <(find . -type f \\( -name "*.o" -o -name "*.tmp" \\))
+
+# 2. 找出所有 build 目录，逐个删并计数
+while IFS= read -r d; do
+    echo "删目录: $d"
+    rm -rf "$d"
+    count=$((count + 1))
+done < <(find . -type d -name "build")
+
+echo "--------------------------------"
+echo "共清理 $count 项。源码目录清爽了。"
+exit 0`)
+        }),
+      ]},
+      { id: "lx-perm", title: "第 5 章 权限系统：rwx / chmod / sudo", blocks: [
+        H.sub("读懂 ls -l 的第一列"),
+        H.code("bash", "权限的样子", `-rwxr-xr-- 1 mae mae 8.5K Oct  2 00:30 run_robot.sh
+ │ └─┬─┘ └─┬─┘
+ │   │     └── 其他人：只读 (r--)
+ │   └──────── 组：读 + 执行 (r-x)
+ └──────────── 所有者：读 + 写 + 执行 (rwx)
+（开头是 d 表示目录，- 表示普通文件）`),
+        H.p("三位一组：<b>所有者 / 组 / 其他人</b>。r=4、w=2、x=1，加起来就是数字权限。"),
+        H.sub("chmod：改权限"),
+        H.code("bash", "chmod", `chmod +x run.sh        # 给自己加执行权限（脚本要能跑）
+chmod 755 deploy.sh    # rwxr-xr-x：我能改，别人能跑
+chmod 600 id_rsa       # rw-------：SSH 私钥必须 600
+sudo chmod 644 /etc/app.conf   # 系统文件要 sudo 才能动`),
+        H.sub("sudo：临时当 root"),
+        H.p("sudo 是「以管理员身份执行这一条命令」。<b>日常用普通账号，要动系统了才 sudo</b>——这是 Linux 的安全哲学，和 Windows 的「一切皆管理员」相反。"),
+        H.note("warn", "SSH 私钥权限", "生成密钥后必须 chmod 600 ~/.ssh/id_rsa。权限太松（如 644）时 ssh 会认为「钥匙可能被人看过」而拒绝使用，报 Permissions too open。"),
+        H.quiz({
+          q: "chmod 754 file 设置的权限是？",
+          tag: "随堂测",
+          opts: ["所有人可执行", "所有者 rwx，组 r-x，其他人 r--", "所有人只读", "所有者只读"],
+          ans: 1,
+          explain: "7=4+2+1（rwx），5=4+1（r-x），4（r--）。拆数字必考：把每个数字拆成 4/2/1 的和。"
+        }),
+      ]},
+    ]},
+
+    { id: "stage-lx-2", title: "第二阶段 · 文本与进程", chapters: [
+      { id: "lx-text", title: "第 6 章 文本三剑客：grep / sed / awk", blocks: [
+        H.sub("grep：找行"),
+        H.code("bash", "grep", `grep "ERROR" app.log            # 找包含 ERROR 的行
+grep -rn "TODO" src/            # -r 递归 -n 带行号：在代码里搜
+grep -i "can" bus.log           # -i 忽略大小写
+grep -v "DEBUG" app.log         # -v 反选：排除 DEBUG 行
+grep -c "ERROR" app.log         # -c 只数个数`),
+        H.sub("sed：改文本（流编辑器）"),
+        H.code("bash", "sed", `sed 's/old/new/' file.txt        # 每行第一个 old 换成 new（只打印不改文件）
+sed -i 's/old/new/g' file.txt   # -i 真正写入文件；g = 全部替换
+sed -n '10,20p' file.txt        # 只打印 10~20 行
+sed -i '/^#/d' config.conf      # 删除所有 # 开头的注释行`),
+        H.sub("awk：按列切"),
+        H.code("bash", "awk", `awk '{print $1}' data.txt            # 打印第一列（默认按空白切）
+awk -F',' '{print $2, $4}' data.csv  # -F 指定逗号分隔，打印第 2、4 列
+ps aux | awk '{print $11}'           # 配合管道：看所有进程名
+awk '$3 > 100 {print $1}' data.txt   # 第三列大于 100 才打印第一列——自带条件`),
+        H.note("master", "三剑客的分工", "一句话记住：<b>grep 挑行、sed 改字、awk 切列</b>。日志分析、CSV 处理、代码搜索，八成的文本处理就是这三个的排列组合。"),
+        H.quiz({
+          q: "把文件里所有 speed 全部替换成 velocity 并写入原文件，用？",
+          tag: "随堂测",
+          opts: ["grep speed file", "sed -i 's/speed/velocity/g' file", "awk '{print}' file", "mv speed velocity"],
+          ans: 1,
+          explain: "sed -i 才写入文件；s/…/…/g 的 g 表示每行全部替换，不带 g 只换每行第一个。"
+        }),
+        H.prac({
+          id: "linux-p3", level: 2, title: "手写：日志分析一条龙",
+          body: "给定 robot.log，每行格式：<code class='inline'>[2026-10-02 10:00:01] [ERROR] chassis - motor 3 overheating</code>。手写命令链：统计 ERROR 级别的行数，并按模块名排序去重计数，输出「次数 模块」两列、从多到少。",
+          hint: "grep 先筛出 ERROR 行；再想办法切出模块名（按 ] 后的字段）；sort | uniq -c | sort -rn 收尾。",
+          solution: H.code("bash", "analyze.sh", `#!/bin/bash
+# 统计 ERROR 日志：每个模块出错几次，从多到少
+# 行格式: [时间] [级别] 模块 - 消息
+
+grep '\\[ERROR\\]' robot.log |
+    awk '{print $4}' |        # 按空白切：[时间] [ERROR] 模块 - 消息 → 第 4 列是模块名
+    sort | uniq -c |          # 计数去重（uniq 前必须 sort）
+    sort -rn                  # 按次数降序
+
+# 输出形如：
+#    42 chassis
+#    17 vision
+#     3 gimbal`)
+        }),
+      ]},
+      { id: "lx-pipe", title: "第 7 章 管道与重定向", blocks: [
+        H.sub("管道：把上一个命令的输出喂给下一个"),
+        H.code("bash", "管道", `ps aux | grep vision          # 进程表里找 vision
+grep -c define config.h       # 数一下有多少个宏定义（grep 自己能数）
+du -sh * 2>/dev/null | sort -rh | head    # 当前目录下最大的几个东西`),
+        H.sub("重定向：输出到文件"),
+        H.code("bash", "重定向", `./robot > run.log            # stdout 写进文件（覆盖）
+./robot >> run.log           # 追加，不清空
+./robot 2> err.log           # 只把报错(stderr)写进 err.log
+./robot > all.log 2>&1       # 输出和错误合流写一个文件——日志标配
+./robot < input.txt          # 从文件读 stdin`),
+        H.p("0=stdin、1=stdout、2=stderr。<code class='inline'>2&gt;&amp;1</code> 读作「把 2 指到 1 去的地方」。顺序不能反：要先写 &gt; all.log 再写 2&gt;&amp;1。"),
+        H.sub("比赛现场的部署场景"),
+        H.code("bash", "后台常驻", `# nohup：挂断终端也继续跑；&：后台运行
+nohup ./vision_node > /var/log/vision.log 2>&1 &
+echo $! > /var/run/vision.pid    # 记下进程号，方便以后 kill`),
+        H.note("pitfall", "& 与 Ctrl+C", "命令尾加 & 是丢后台；后台程序有时还占着终端输出，所以要配合重定向。想让它「关了终端也活着」用 nohup 或 systemd（第 15 章）。"),
+        H.quiz({
+          q: "把标准输出和错误输出都追加到 run.log，用？",
+          tag: "随堂测",
+          opts: ["> run.log 2>&1", ">> run.log 2>&1", "2> run.log", "> run.log > err.log"],
+          ans: 1,
+          explain: ">> 是追加不覆盖；2>&1 把 stderr 并到 stdout 的去向。A 是覆盖版；顺序必须目标在前。"
+        }),
+      ]},
+      { id: "lx-proc", title: "第 8 章 进程管理：ps / top / kill", blocks: [
+        H.sub("看进程"),
+        H.code("bash", "ps / top", `ps aux | grep -i ros        # 全量进程表里找 ros
+ps -ef                        # 另一种格式（能看父进程 PPID）
+top                           # 动态刷新（q 退出，M 按内存排，P 按 CPU）
+htop                          # top 加强版：sudo apt install htop`),
+        H.sub("杀进程"),
+        H.code("bash", "kill", `kill 12345            # 礼貌请求：SIGTERM(15)，程序可以收拾后事再退
+kill -9 12345         # 暴力：SIGKILL，立即蒸发，可能留垃圾
+killall vision_node   # 按名字杀
+pkill -f "python.*detect.py"   # 按完整命令行匹配杀`),
+        H.p("信号常识：15（TERM，默认）= 请你退出；9（KILL）= 立即消失；2（INT）= Ctrl+C。<b>先 15 后 9</b>，上来就 -9 是蛮干。"),
+        H.sub("任务的前后台"),
+        H.code("bash", "jobs / fg / bg", `./long_task &         # 后台启动
+jobs                  # 看后台任务列表
+fg %1                 # 拉回前台
+# 前台跑着按 Ctrl+Z → 暂停
+bg                    # 让暂停的任务在后台继续`),
+        H.note("master", "机器人卡死急救", "视觉节点占 95% CPU 不响应：top 找 PID → kill PID → 十秒没动静再 kill -9 → <code class='inline'>dmesg | tail</code> 看内核有没有报 OOM（内存爆了内核会杀进程）。"),
+        H.quiz({
+          q: "kill -9 和 kill（默认 15）的区别？",
+          tag: "随堂测",
+          opts: ["没区别", "15 允许程序清理后退出，9 立即强杀", "9 更礼貌", "15 只杀子进程"],
+          ans: 1,
+          explain: "SIGTERM(15) 可被捕获，程序能保存现场；SIGKILL(9) 不可捕获不可忽略。永远先试 15。"
+        }),
+        H.prac({
+          id: "linux-p4", level: 2, title: "手写：进程看门狗",
+          body: "手写 watchdog.sh：循环检查进程 vision_node 是否存活（pgrep），不在就打印带时间戳的告警并用 nohup 重新启动（日志进 /var/log/vision_node.log），每 5 秒查一次，永远循环。",
+          hint: "pgrep -x 按进程名精确找；date '+%F %T' 打时间戳；while true; do …; sleep 5; done。",
+          solution: H.code("bash", "watchdog.sh", `#!/bin/bash
+# 看门狗：vision_node 死了就自动拉起
+while true; do
+    if ! pgrep -x "vision_node" > /dev/null; then
+        echo "[$(date '+%F %T')] 告警：vision_node 不在了，正在重启..."
+        nohup ./vision_node > /var/log/vision_node.log 2>&1 &
+        echo "[$(date '+%F %T')] 已重启，PID=$!"
+    fi
+    sleep 5
+done`)
+        }),
+      ]},
+      { id: "lx-shell", title: "第 9 章 Shell 脚本：从一行到工程化", blocks: [
+        H.sub("脚本的第一行和变量"),
+        H.code("bash", "基础", `#!/bin/bash            # shebang：告诉系统用哪个解释器跑这脚本
+NAME="robomaster"       # 赋值等号两边不能有空格！
+echo "队伍名: $NAME"
+echo '原样输出: $NAME'   # 单引号不展开变量
+DATE=$(date +%F)        # 命令替换：把命令输出存进变量
+echo "今天是 $DATE"`),
+        H.sub("条件与循环"),
+        H.code("bash", "逻辑", `# if：注意 [ ] 两边的空格
+if [ -f "config.yaml" ]; then
+    echo "配置存在"
+else
+    echo "缺配置，退出"
+    exit 1
+fi
+
+# for：遍历列表
+for cam in 0 1 2; do
+    echo "初始化相机 $cam"
+done
+
+# while：读文件的每一行
+while read -r line; do
+    echo "-> $line"
+done < robot_list.txt`),
+        H.sub("参数与函数"),
+        H.code("bash", "参数", `#!/bin/bash
+# $1 $2 是第 1、2 个参数；$# 是个数；$0 是脚本名
+deploy() {
+    echo "部署到: $1"
+    scp -r ./build "mae@$1:/home/mae/"
+}
+if [ $# -lt 1 ]; then
+    echo "用法: $0 <机器人IP>"
+    exit 1
+fi
+deploy "$1"`),
+        H.note("pitfall", "脚本三坑", "① 赋值 A=1 两边不能有空格，A = 1 会被当成执行命令 A；② [ ] 内部两侧必须有空格；③ 变量引用永远加双引号 \"$VAR\"，防止带空格的路径炸开。"),
+        H.quiz({
+          q: "脚本里写 A = 5 会发生什么？",
+          tag: "随堂测",
+          opts: ["A 被赋值为 5", "报错：找不到命令 A", "A 被赋值为空", "语法错误直接退出"],
+          ans: 1,
+          explain: "Shell 把 A 当命令名、= 和 5 当参数去执行，而系统里没有叫 A 的命令。赋值必须紧凑写：A=5。"
+        }),
+        H.prac({
+          id: "linux-p5", level: 2, title: "手写：一键编译部署脚本",
+          body: "手写 deploy.sh 目标IP：① 检查参数个数，缺了打印用法退出；② 编译（mkdir -p build 进去 cmake .. && make -j 核数）；③ 编译失败就退出；④ scp 把 build/robot 拷到目标机 ~/deploy/；⑤ ssh 到目标机重启服务。",
+          hint: "set -e 让任何一步失败就停；$# 查参数个数；$(nproc) 取 CPU 核数；scp 前先 ssh 建目录。",
+          solution: H.code("bash", "deploy.sh", `#!/bin/bash
+# 一键编译 + 部署：./deploy.sh 192.168.1.30
+set -e    # 任何一步失败立即退出
+
+if [ $# -lt 1 ]; then
+    echo "用法: $0 <机器人IP>"
+    exit 1
+fi
+TARGET="$1"
+
+echo "==> [1/3] 编译"
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j"$(nproc)"
+
+echo "==> [2/3] 传输到 $TARGET"
+ssh "mae@$TARGET" "mkdir -p ~/deploy"
+scp robot "mae@$TARGET:~/deploy/"
+
+echo "==> [3/3] 重启服务"
+ssh "mae@$TARGET" "sudo systemctl restart robot"
+
+echo "部署完成。"`),
+        }),
+      ]},
+      { id: "lx-env", title: "第 10 章 环境变量与 PATH", blocks: [
+        H.sub("环境变量是什么"),
+        H.code("bash", "env", `echo $PATH             # 最重要的一条：命令搜索路径
+echo $HOME             # 家目录
+echo $USER             # 用户名
+env | grep -i ros      # ROS 相关的环境变量
+printenv LANG          # 看单个变量`),
+        H.sub("PATH：命令从哪找"),
+        H.p("敲 gcc 时，Shell 按顺序扫 PATH 里冒号分隔的每个目录，找到第一个叫 gcc 的可执行文件就运行。which gcc 告诉你最终用的是哪个。"),
+        H.code("bash", "改 PATH", `export PATH="$HOME/tools/bin:$PATH"   # 把自己的工具目录放到最前
+which gcc                              # /usr/bin/gcc
+echo $PATH | tr ':' '\\n'              # 每行一个路径，好读`),
+        H.sub("临时 vs 永久"),
+        H.table("生效范围", ["写在哪", "何时生效", "适合放什么"], [
+          ["终端里 export", "只这个终端，关了就没", "临时测试"],
+          ["~/.bashrc", "每次开新终端自动执行", "个人习惯：别名、PATH"],
+          ["/etc/environment", "全系统所有用户", "部署机的全局配置"]
+        ]),
+        H.code("bash", "写入 bashrc", `echo 'export RM_WS="$HOME/rm_ws"' >> ~/.bashrc
+source ~/.bashrc       # 立即重载，不用开新终端
+echo $RM_WS`),
+        H.note("master", "ROS 2 的第一课就是环境变量", "以后跑 ROS 2 前要 source /opt/ros/humble/setup.bash，本质就是把它的工具目录挂进 PATH——理解这章，ROS 2 的环境问题你不会再慌。"),
+        H.quiz({
+          q: "把 export 写进 ~/.bashrc 后，怎样让当前终端立即生效？",
+          tag: "随堂测",
+          opts: ["重启电脑", "source ~/.bashrc", "什么都不用做", "重新登录"],
+          ans: 1,
+          explain: "bashrc 只在新终端启动时执行。source（或 . ~/.bashrc）在当前 shell 里重新执行一遍。"
+        }),
+      ]},
+    ]},
+
+    { id: "stage-lx-3", title: "第三阶段 · 开发工具链与部署", chapters: [
+      { id: "lx-git", title: "第 11 章 Git：版本控制（队伍的命根）", blocks: [
+        H.sub("最小生存集"),
+        H.code("bash", "日常六连", `git status             # 我改了什么（最常用，没有之一）
+git add src/main.cpp   # 暂存指定文件
+git add -A             # 暂存全部改动
+git commit -m "修复云台 PID 积分饱和"
+git pull               # 拉队友的更新（推前必拉）
+git push               # 推到远端`),
+        H.sub("分支：比赛期的保险"),
+        H.code("bash", "分支", `git branch                     # 看分支
+git checkout -b feature/antitop # 建新分支并切换
+git checkout main               # 切回主分支
+git merge feature/antitop       # 把分支合进当前分支
+git log --oneline -10           # 最近 10 条提交，一行一条`),
+        H.sub(".gitignore：别把垃圾提交上去"),
+        H.code("bash", ".gitignore", `build/
+*.o
+*.pyc
+.vscode/
+*.log
+# 密钥和凭据——绝对不进仓库！
+id_rsa
+*.env`),
+        H.note("warn", "血泪规矩", "① <b>push 之前先 pull</b>，不然冲突处理到你怀疑人生；② 大文件（数据集、rosbag、模型权重）不进 git，用网盘或 git-lfs；③ 提交信息写清楚改了什么为什么改，一个月后你会感谢现在的自己。"),
+        H.quiz({
+          q: "队友说「你先 pull 再 push」，为什么？",
+          tag: "随堂测",
+          opts: ["礼貌问题", "不 pull 直接 push 会被远端拒绝或产生分叉", "pull 会自动备份", "push 必须两人同时在线"],
+          ans: 1,
+          explain: "远端有你没有的提交时直接 push 会被拒绝（non-fast-forward）；强推 --force 会覆盖队友工作——新人绝对禁止用。"
+        }),
+        H.prac({
+          id: "linux-p6", level: 1, title: "手写：规范的 .gitignore",
+          body: "为 RM 视觉工程手写完整 .gitignore：排除 C++ 编译产物（build/、*.o、*.so）、Python 缓存（__pycache__/、*.pyc、.venv/）、日志（*.log、logs/）、IDE 配置（.vscode/、.idea/）、模型与数据大文件（*.pt、*.onnx、dataset/）、密钥（*.env、id_rsa、*.pem）。每类加一行注释。",
+          hint: "一行一条规则，# 是注释；目录用结尾斜杠更明确。",
+          solution: H.code("bash", ".gitignore", `# ---- C++ 编译产物 ----
+build/
+cmake-build-*/
+*.o
+*.so
+*.a
+
+# ---- Python ----
+__pycache__/
+*.pyc
+.venv/
+
+# ---- 日志 ----
+*.log
+logs/
+
+# ---- IDE ----
+.vscode/
+.idea/
+
+# ---- 大文件：模型与数据集（走网盘 / git-lfs）----
+*.pt
+*.onnx
+dataset/
+
+# ---- 密钥，绝不入库 ----
+*.env
+id_rsa
+*.pem`)
+        }),
+      ]},
+      { id: "lx-cmake", title: "第 12 章 CMake：C/C++ 工程构建系统", blocks: [
+        H.sub("为什么是 CMake"),
+        H.p("命令行直接敲 gcc 只适合单文件。真实工程几十个源文件、多平台、依赖 OpenCV/Eigen——CMake 帮你管理这一切。ROS 2 的包也是 CMake 驱动的。"),
+        H.sub("最小可用模板"),
+        H.code("cmake", "CMakeLists.txt", `cmake_minimum_required(VERSION 3.16)
+project(rm_vision LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)          # 用 C++17
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(OpenCV REQUIRED)       # 找依赖
+
+add_executable(detect               # 目标：可执行文件
+    src/main.cpp
+    src/detector.cpp
+    src/serial.cpp
+)
+target_link_libraries(detect        # 链接库
+    \${OpenCV_LIBS}
+    pthread
+)`),
+        H.sub("标准构建流程"),
+        H.code("bash", "构建", `mkdir build && cd build     # 永远在独立 build 目录里构建（不污染源码）
+cmake ..                    # 生成 Makefile（改了 CMakeLists 才需要重跑）
+make -j$(nproc)             # 并行编译，核数拉满
+./detect                    # 跑起来`),
+        H.note("master", "为什么要有 build 目录", "所有编译产物集中隔离，想重来就 rm -rf build，源码目录永远干净。这叫 out-of-source build，工程上的标准姿势。"),
+        H.quiz({
+          q: "只改了 main.cpp，正确的重新构建命令是？",
+          tag: "随堂测",
+          opts: ["cmake .. 再 make", "只 make 就够", "删掉整个项目重来", "重新 cmake 和 make"],
+          ans: 1,
+          explain: "cmake 只负责生成构建系统，源文件改动 make 增量编译即可。只有改了 CMakeLists.txt 才重跑 cmake。"
+        }),
+      ]},
+      { id: "lx-debug", title: "第 13 章 GDB：命令行调试", blocks: [
+        H.sub("printf 是工人的锤子，GDB 是工程师的万用表"),
+        H.code("bash", "启动与单步", `g++ -g main.cpp -o main    # -g 带调试符号，GDB 的前提
+gdb ./main                 # 进入 GDB 交互界面
+(gdb) break main           # 在 main 打断点（简写 b）
+(gdb) break detector.cpp:42    # 在指定文件行打断点
+(gdb) run                  # 跑起来（简写 r）
+(gdb) next                 # 单步跳过函数（n）
+(gdb) step                 # 单步进入函数（s）
+(gdb) print armor.x        # 看变量（p）
+(gdb) continue             # 跑到下一个断点（c）
+(gdb) bt                   # 崩溃后看调用栈——救命命令！
+(gdb) quit                 # 退出（q）`),
+        H.sub("段错误（Segmentation fault）排查流程"),
+        H.code("bash", "崩溃三板斧", `# 1. 带调试符号编译，关优化
+g++ -g -O0 vision.cpp -o vision    # -O0 关优化，调试看得准
+
+# 2. GDB 里跑，崩了自动停
+gdb ./vision
+(gdb) run
+Program received signal SIGSEGV ...   # 崩在这
+
+# 3. 看栈：谁调用了谁，一目了然
+(gdb) bt
+#0  cv::Mat::at (this=0x0 ...)         ← 空指针 Mat！
+#1  Detector::process (this=0x55...)
+#2  main (argc=1, argv=...)`),
+        H.note("pitfall", "core dump 没开？", "程序崩了没 core 文件？ulimit -c unlimited 打开 core 转储，崩溃现场存成文件，用 gdb ./vision core 验尸。板子内存小的可以关。"),
+        H.quiz({
+          q: "GDB 里程序段错误停了，第一个该敲的命令是？",
+          tag: "随堂测",
+          opts: ["print", "bt（backtrace）", "run", "quit"],
+          ans: 1,
+          explain: "bt 打印调用栈：崩在哪个函数、被谁调用，一清二楚。排段错误第一步永远是 bt。"
+        }),
+        H.prac({
+          id: "linux-p7", level: 3, title: "手写：段错误验尸报告",
+          body: "写一份 GDB 排查笔记（命令 + 说明）。场景：视觉程序比赛现场崩溃，输出 Segmentation fault (core dumped)。要求：① 编译时的必要参数及原因；② GDB 启动与复现命令；③ 崩溃后前三步操作及各自目的；④ bt 显示 this=0x0 说明什么、下一步查什么。",
+          hint: "编译 -g -O0；gdb ./程序 + run；bt → frame 0 → print 变量；this=0x0 是空对象调成员函数，查创建/判空/初始化顺序。",
+          solution: H.code("text", "gdb_notes.md", `## 段错误验尸流程
+
+### 1. 编译：带符号、关优化
+g++ -g -O0 -std=c++17 vision.cpp detector.cpp -o vision
+# -g 调试符号（GDB 能显示行号、变量名）
+# -O0 不优化（防止变量被优化掉、行号乱跳）
+
+### 2. 复现
+gdb ./vision
+(gdb) run
+# 等它崩：Program received signal SIGSEGV
+
+### 3. 崩溃后前三步
+# 第一步：bt —— 看调用栈，锁定崩溃函数和调用链
+(gdb) bt
+#  #0 Detector::process (this=0x0) at detector.cpp:42
+#  #1 main () at vision.cpp:88
+
+# 第二步：frame 0 —— 切到崩溃现场那一帧
+(gdb) frame 0
+
+# 第三步：print 关键变量 —— 确认空的是哪个
+(gdb) p this
+# $1 = (Detector * const) 0x0     ← 空指针实锤
+
+### 4. this=0x0 意味着什么
+# 在空对象上调成员函数。不访问成员时甚至能跑通，
+# 一访问 this->xxx 就崩。下一步：
+# ① 查对象在哪创建：grep -n "new Detector" src/
+# ② 查初始化顺序：是不是构造之前就用了
+# ③ 查智能指针：是不是 reset()/置空后还在用
+# ④ 补防御：调用处判空 assert(detector_ != nullptr)`)
+        }),
+      ]},
+      { id: "lx-net", title: "第 14 章 网络工具：ssh / scp / ip", blocks: [
+        H.sub("ssh：远程登录机器人"),
+        H.code("bash", "ssh", `ssh mae@192.168.1.30            # 用户名@机器人IP
+ssh -p 2222 mae@robot.local     # 非标准端口
+# 免密登录：把自己的公钥装到机器人上（只需一次）
+ssh-keygen -t ed25519                    # 没钥匙先生成，一路回车
+ssh-copy-id mae@192.168.1.30             # 装钥匙
+ssh mae@192.168.1.30                     # 以后直接进，不用密码`),
+        H.sub("scp / rsync：传文件"),
+        H.code("bash", "传文件", `scp robot mae@192.168.1.30:~/deploy/     # 上传
+scp mae@192.168.1.30:~/logs/*.log ./     # 下载
+scp -r firmware/ mae@192.168.1.30:~/    # 传整个目录
+rsync -avz --progress build/ mae@192.168.1.30:~/build/   # 增量同步`),
+        H.sub("ip / ping：网络诊断"),
+        H.code("bash", "诊断", `ip addr                     # 我的 IP（旧命令 ifconfig）
+ip route                    # 网关
+ping -c 3 192.168.1.30      # 通不通（-c 限制次数）
+# 看哪个进程占着端口（视觉程序监听 8888）
+ss -tlnp | grep 8888`),
+        H.note("master", "比赛日网络纪律", "赛场 IP 混乱：先 ip addr 确认自己网段，再 ping 机器人。连不上别乱改配置——<b>先查网线、交换机灯，再 ip route</b>。SSH 断线重连用 screen 或 tmux 保持远程会话不死。"),
+        H.quiz({
+          q: "每次 ssh 都要输密码，标准解法是？",
+          tag: "随堂测",
+          opts: ["把密码写进脚本", "ssh-keygen + ssh-copy-id 公钥免密", "关掉密码校验", "用 root 登录"],
+          ans: 1,
+          explain: "公钥认证：本机持私钥、机器人存公钥，握手即通过。私钥权限必须 600。明文密码脚本一旦泄漏就完了。"
+        }),
+      ]},
+      { id: "lx-cross", title: "第 15 章 交叉编译与板子部署", blocks: [
+        H.sub("什么是交叉编译"),
+        H.p("在 x86 电脑上编译出 ARM 架构可执行文件，烧到板子上跑。原因：板子算力弱，编译大工程太慢。工具链名字说明目标：arm-none-eabi-gcc（裸机 STM32）、aarch64-linux-gnu-gcc（ARM Linux 如 Jetson）。"),
+        H.sub("电控：arm-none-eabi（STM32 裸机）"),
+        H.code("bash", "裸机交叉编译", `sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi
+arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb \\
+    -O2 -Wall -Wextra \\
+    main.c hal_can.c pid.c -T linker.ld -o firmware.elf
+arm-none-eabi-objcopy -O binary firmware.elf firmware.bin
+# firmware.bin 就是烧录文件：st-flash write firmware.bin 0x8000000`),
+        H.sub("视觉：aarch64（Jetson 等 ARM Linux）"),
+        H.code("bash", "ARM Linux 交叉编译", `sudo apt install g++-aarch64-linux-gnu
+# CMake 里指定工具链文件 toolchain-aarch64.cmake：
+#   set(CMAKE_SYSTEM_NAME Linux)
+#   set(CMAKE_SYSTEM_PROCESSOR aarch64)
+#   set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain-aarch64.cmake ..
+make -j$(nproc)`),
+        H.sub("systemd：让程序开机自启、崩溃自拉"),
+        H.code("bash", "robot.service", `# /etc/systemd/system/robot.service
+[Unit]
+Description=RM Vision Node
+After=network.target
+
+[Service]
+ExecStart=/home/mae/deploy/vision_node
+Restart=always            # 崩了自动拉起，比赛保命符
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+
+# ---- 管理命令 ----
+sudo systemctl daemon-reload
+sudo systemctl enable --now robot    # 开机自启 + 立即启动
+systemctl status robot               # 看状态
+journalctl -u robot -f               # 跟踪它的日志`),
+        H.note("master", "结课标准", "到这一章，你应当能独立走通：<b>WSL2 环境 → 命令行生存 → 脚本化构建部署 → git 管版本 → gdb 排崩溃 → ssh 部署到板子 → systemd 守护</b>。这条链走通，你就是队里「能把东西真正跑起来」的人——每个队最缺的就是这种人——能独立把东西真正跑起来的人。"),
+        H.quiz({
+          q: "部署到比赛机器人，程序崩溃后要自动重启，用哪个机制？",
+          tag: "随堂测",
+          opts: ["nohup", "systemd 服务 + Restart=always", "while true 手动重启", "crontab 每分钟拉起"],
+          ans: 1,
+          explain: "systemd 是系统级服务管理：崩溃自动拉起、开机自启、日志收集（journalctl）一条龙。nohup 只是关终端不死，崩了就没了。"
+        }),
+        H.prac({
+          id: "linux-p8", level: 3, title: "手写：机器人 systemd 服务单元",
+          body: "手写完整 rm-vision.service：视觉节点在 /opt/rm/vision_node，要求网络就绪后启动、崩溃 3 秒自动重启、以低权限专用用户 robot 运行、20 秒内崩 5 次以上熔断。再写出启用它的五条管理命令（重载/自启/状态/重启/看日志）。",
+          hint: "After=network-online.target；Restart=always + RestartSec=3；User=robot；StartLimitIntervalSec=20 + StartLimitBurst=5；enable --now / status / restart / journalctl -u。",
+          solution: H.code("bash", "rm-vision.service", `# /etc/systemd/system/rm-vision.service
+[Unit]
+Description=RM Vision Node
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=robot                       # 低权限专用账号，崩了不伤系统
+WorkingDirectory=/opt/rm
+ExecStart=/opt/rm/vision_node --config /opt/rm/config.yaml
+Restart=always                   # 崩溃必拉起
+RestartSec=3                     # 崩后等 3 秒（防疯狂重启循环）
+# 熔断：20 秒内崩 5 次以上进入 failed
+StartLimitIntervalSec=20
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
+
+# ===== 管理命令 =====
+# sudo systemctl daemon-reload             # 改过文件后重载
+# sudo systemctl enable --now rm-vision    # 开机自启 + 立即启动
+# systemctl status rm-vision               # 看运行状态
+# sudo systemctl restart rm-vision         # 重启
+# journalctl -u rm-vision -f               # 实时跟踪日志`)
+        }),
+      ]},
+    ]},
+  ]
+};
+</script>
+</body>
+</html>

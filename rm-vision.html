@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>RM 视觉 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="rmv">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "rmv",
+  title: "RM 视觉",
+  badge: "BATTLE",
+  crumb: "RM 视觉 · 装甲板识别与弹道解算",
+  lead: "视觉组的完整弹药链：<b>光学 → 检测 → 解算 → 预测 → 通信</b>。每一环都给你拆到能徒手写出来为止。电控转视觉的兄弟注意：这里的 C++ 是「工具」，数学和坐标系才是「主业」。",
+  prev: { href: "rm-embedded.html", label: "RM 电控" },
+  next: { href: "rm-opencv.html", label: "OpenCV 专题" },
+
+  stages: [
+    { id: "stage-rmv-1", title: "第一阶段 · 光学与几何（一切的根）", chapters: [
+      { id: "rmv-coord", title: "第 1 章 坐标系：视觉 bug 的源头 ★★★", blocks: [
+        H.p("视觉调试到深夜的 bug，最后十有八九是<b>坐标系搞错了</b>。先把这五套坐标系焊死在脑子里："),
+        H.ul([
+          "<b>像素系 (u,v)</b>：原点左上角，单位 px。只是传感器读数，无物理含义。",
+          "<b>归一化成像平面</b>：x=(u-cx)/fx，y=(v-cy)/fy。把像素拉回「焦距=1」的世界。",
+          "<b>相机系 (X,Y,Z)</b>：原点光心，Z 朝前，X 右 Y 下。单位 mm。",
+          "<b>云台系</b>：跟随 yaw/pitch 转动，解算的参考系。",
+          "<b>枪管系</b>：原点在<b>枪管出口</b>——弹道下坠补偿在包含枪管的竖直平面内做。"
+        ]),
+        H.code("text", "坐标变换链.txt", [
+          "世界 → 相机（外参 R,t 标定）",
+          "     → 云台（机械装配偏移）",
+          "     → 枪管（枪口偏移）",
+          "",
+          "链路上每一段都必须「已知且不变」，",
+          "否则解算结果随姿态漂移。"
+        ].join("\n")),
+        H.note("pitfall", "血泪教训", "相机装歪 0.5°，8m 外命中率从 90% 掉到 30%。外参标定不是一次性工作——<b>每次拆装相机都要重标</b>。"),
+        H.quiz({
+          q: "为什么枪管系原点选在枪管出口而不是云台中心？",
+          tag: "随堂测",
+          opts: ["习惯而已", "弹道下坠补偿要在包含枪管的竖直平面内做，原点在枪口可直接叠加下坠量", "枪口比云台中心轻", "电机在那儿"],
+          ans: 1,
+          explain: "弹道解算发生在枪管所在的竖直平面。原点取枪口，下坠量直接叠加；若取云台中心，还要额外换算枪口偏移，多一步就多一处漂移源。"
+        })
+      ]},
+      { id: "rmv-camera", title: "第 2 章 相机与光源（硬件决定上限）", blocks: [
+        H.sub("选型三铁律"),
+        H.ul([
+          "<b>全局快门</b>：RM 车高速运动，滚动快门的果冻效应会把装甲板拍成平行四边形。必须全局快门。",
+          "<b>短曝光 + 主动光源</b>：曝光越短运动模糊越小，但进光量少——用补光灯拉回来。常用 120~200fps、曝光 1~2ms。",
+          "<b>镜头焦距</b>：焦距越长看得越远但视野越窄。步兵常用 6~8mm；狙击取 12mm+。"
+        ]),
+        H.p("相机内参（fx, fy, cx, cy + 畸变系数）用张正友标定法获得——OpenCV 的 calibrateCamera 一行搞定，棋盘格拍 20 张不同角度即可。"),
+        H.note("master", "师父经验", "标定板要平整（玻璃板贴格子纸最稳）、光照要覆盖实际场景、每次拆装镜头后重标。<b>畸变不矫正，PnP 就是 garbage in garbage out。</b>")
+      ]},
+    ]},
+
+    { id: "stage-rmv-2", title: "第二阶段 · 装甲板检测（视觉的主战场）", chapters: [
+      { id: "rmv-pipeline", title: "第 3 章 检测流水线：二值化 → 灯条 → 装甲板 ★★★", blocks: [
+        H.p("RM 装甲板检测的经典流水线，五步一气呵成："),
+        H.code("text", "pipeline.txt", [
+          "1. BGR → HSV / 通道拆分",
+          "   └─ 装甲板灯条：红/蓝特定色相，高亮度",
+          "2. 阈值二值化（inRange / threshold）",
+          "   └─ 关键参数：亮度下限、色彩通道上下限",
+          "3. 形态学预处理（可选）",
+          "   └─ 开运算去噪点，闭运算补断裂",
+          "4. findContours 找轮廓 → 筛选灯条",
+          "   └─ 条件：面积、长宽比（灯条细长 ≈ 1:5）、",
+          "      角度（接近竖直 ±30°）、凸性",
+          "5. 灯条两两配对 → 装甲板",
+          "   └─ 条件：高度差、角度差、中心距、平行度"
+        ].join("\n")),
+        H.sub("灯条筛选的量化条件（背下来）"),
+        H.code("cpp", "lightbar_filter.cpp", [
+          "bool is_lightbar(const cv::RotatedRect &r, double img_h) {",
+          "    double ratio = r.size.height / r.size.width;",
+          "    if (ratio < 2.0 || ratio > 10.0) return false;  // 细长",
+          "    if (r.size.area() < img_h * 0.5)   return false; // 太小",
+          "    double ang = r.angle;",
+          "    if (std::abs(ang) > 30.0 && std::abs(ang - 180.0) > 30.0)",
+          "        return false;                                // 近竖直",
+          "    return true;",
+          "}"
+        ].join("\n")),
+        H.note("pitfall", "调参天坑", "阈值写死必死——赛场的灯和训练场不一样。<b>HSV 阈值做成 YAML 配置文件，现场用滑条工具实时调</b>（练习中心 rmv-p13 给你安排了）。"),
+        H.quiz({
+          q: "为什么灯条配对要检查「高度差」而不是「y 坐标相等」？",
+          tag: "随堂测",
+          opts: ["y 相等就够了", "装甲板可能倾斜，两条灯条的 y 中心会有偏差，用相对高度差容忍倾斜", "高度差检测更快", "没有区别"],
+          ans: 1,
+          explain: "机器人俯仰时装甲板在图像里是斜的，两灯条 y 不等。用「高度差/灯条长度 < 0.5」这类相对量，比绝对相等鲁棒得多。"
+        })
+      ]},
+      { id: "rmv-pnp", title: "第 4 章 PnP 解算：从像素到三维 ★★★", blocks: [
+        H.p("检测到装甲板后，用四个灯条角点 + 装甲板真实尺寸，解出它在相机系下的位姿（R, t）。这就是 <b>PnP（Perspective-n-Point）</b>。"),
+        H.code("cpp", "solve_pnp.cpp", [
+          "/* 装甲板物理尺寸（mm）——大装甲板 230x55，小装甲板 135x55 */",
+          "std::vector<cv::Point3f> object_pts = {",
+          "    {-135/2., -55/2., 0}, { 135/2., -55/2., 0},",
+          "    { 135/2.,  55/2., 0}, {-135/2.,  55/2., 0}  // 小装甲",
+          "};",
+          "",
+          "cv::Mat rvec, tvec;",
+          "cv::solvePnP(object_pts, image_corners, camera_matrix,",
+          "             dist_coeffs, rvec, tvec, false,",
+          "             cv::SOLVEPNP_IPPE);   // 平面四点专用，快且稳",
+          "",
+          "/* tvec = 装甲板中心在相机系的平移（mm）",
+          " * 相机系：x 右、y 下、z 前 */"
+        ].join("\n")),
+        H.sub("PnP 三大坑"),
+        H.ul([
+          "<b>内参没标好</b>：fx/fy 差 5%，距离就差 5%。先标定后解算。",
+          "<b>角点顺序不一致</b>：object_pts 和 image_corners 的点必须一一对应（左上→右上→右下→左下），顺序乱了 tvec 直接飞。",
+          "<b>装甲板尺寸选错</b>：大装甲和小装甲尺寸差一倍，先分类再解算，或两种都解取重投影误差小的。"
+        ]),
+        H.note("master", "工程技巧", "solvePnP 输出有两个解时（平面四点特性），用重投影误差挑小的那个；再用 IMU 姿态做合理性校验——tvec 突变超过物理极限就丢帧。")
+      ]},
+    ]},
+
+    { id: "stage-rmv-3", title: "第三阶段 · 弹道与预测（打得中的关键）", chapters: [
+      { id: "rmv-ballistic", title: "第 5 章 弹道模型：重力 + 空气阻力 ★★★", blocks: [
+        H.p("弹丸出膛后受重力和空气阻力，直接瞄必然打低。<b>解法：离线积分弹道，生成「距离→俯仰角」查找表，运行时插值。</b>"),
+        H.code("cpp", "ballistic.cpp", [
+          "/* 离线：欧拉积分弹道表 */",
+          "double v0 = 26.0;      // 弹速 m/s（实测！）",
+          "double k  = 0.10;      // 阻力系数（实测拟合）",
+          "const double g = 9.8, dt = 1e-4;",
+          "",
+          "double sim_drop(double dist) {",
+          "    double y = 0, vy = v0, z = 0, vz = 0;",
+          "    while (y < dist) {",
+          "        vy += -k * vy * dt;   // 阻力",
+          "        vz += -g  * dt;       // 重力",
+          "        y  += vy * dt;",
+          "        z  += vz * dt;",
+          "    }",
+          "    return -z;  // 下坠量（正值，向上补偿）",
+          "}",
+          "/* 生成表：dist 0.5m 步进 → pitch_angle 表",
+          " * 运行时：线性插值 O(1)，比实时积分快一万倍 */"
+        ].join("\n")),
+        H.p("完整链路：<b>目标距离 d（PnP 的 tvec 模长）→ 查表得下坠量 drop → 俯仰补偿角 atan(drop/d) → 叠加到云台 pitch 目标</b>。"),
+        H.quiz({
+          q: "为什么用查找表而不是实时积分？",
+          tag: "随堂测",
+          opts: ["实时积分不准确", "实时积分太慢，控制循环 1kHz 等不起；查找表 O(1) 插值，且参数可离线精调", "查找表更省内存", "都一样"],
+          ans: 1,
+          explain: "1kHz 控制环里做欧拉积分会吃掉宝贵的时间片。离线积分出表，运行时插值，精度换速度——这是嵌入式的经典 trade-off。"
+        })
+      ]},
+      { id: "rmv-ekf", title: "第 6 章 运动预测：卡尔曼滤波入门 ★★", blocks: [
+        H.p("弹丸飞行要 100~300ms，目标在动——瞄「现在」必打空。<b>用卡尔曼滤波估计目标速度，预测「未来」位置。</b>"),
+        H.code("cpp", "kf_concept.cpp", [
+          "/* 匀速模型卡尔曼（简化示意）",
+          " * 状态 x = [位置, 速度]，观测 z = 位置 */",
+          "",
+          "// 预测（每帧）：",
+          "x = F * x;                  // F=[[1,dt],[0,1]] 位置+=速度*dt",
+          "P = F * P * F^T + Q;        // 协方差也膨胀（越预测越不确定）",
+          "",
+          "// 更新（有观测时）：",
+          "K = P * H^T * (H*P*H^T + R)^-1;  // 卡尔曼增益：信预测还是信观测",
+          "x = x + K * (z - H*x);           // 融合",
+          "P = (I - K*H) * P;               // 协方差收缩（越观测越确定）"
+        ].join("\n")),
+        H.p("工程要点：装甲板会<b>切换（编号跳变）</b>，切目标时重置滤波器；丢帧超过 200ms 转预测模式，再丢就报 LOST。"),
+        H.note("master", "师父经验", "别上来就调 Q/R 玄学参数。先保证：①坐标系统一（相机系 vs 云台系）②时间戳对齐（图像时间 vs IMU 时间）③延迟实测。这三件事没做对，滤波器参数调到天亮也没用。")
+      ]},
+      { id: "rmv-comm", title: "第 7 章 数据链：视觉 → 电控", blocks: [
+        H.p("视觉算出目标云台角，怎么交给电控？两派方案："),
+        H.table("视觉-电控通信方案对比", ["方案", "实现", "优点", "缺点"], [
+          ["串口", "USB-TTL, 自定义帧（帧头+数据+CRC）", "简单，NUC 直连 C 板", "带宽低，插头易松"],
+          ["以太网/UDP", "网线 + 自定义 UDP 包", "带宽高，稳定", "C 板要加网卡，成本高"]
+        ]),
+        H.code("text", "串口帧协议示例.txt", [
+          "┌──────┬──────┬────────┬────────┬────────┬───────┬──────┐",
+          "│ 帧头  │ 类型  │ yaw目标 │ pitch目 │ 时间戳 │ CRC8  │ 帧尾 │",
+          "│ 0xA5 │ 0x01 │ int16  │ int16  │ uint32 │ crc   │ 0x5A │",
+          "└──────┴──────┴────────┴────────┴───────┴───────┴──────┘",
+          "",
+          "电控侧：中断收字节 → 状态机拼帧 → CRC 校验 → 丢错的帧",
+          "视觉侧：100~200Hz 发送，带时间戳让电控做延迟补偿"
+        ].join("\n")),
+        H.note("pitfall", "联调惨案", "不做 CRC 的队伍，串口线一受干扰，云台就会随机抽搐——当场排除一晚上，最后发现是地线干扰。<b>帧头 + CRC + 帧尾，一个都不能少。</b>")
+      ]},
+    ]},
+
+    { id: "stage-rmv-4", title: "第四阶段 · 实战与带队", chapters: [
+      { id: "rmv-tuning", title: "第 8 章 调试方法论：把命中率调到 80%+", blocks: [
+        H.sub("调试的正确顺序（别乱来）"),
+        H.ol([
+          "<b>静态精度</b>：固定靶，3m/5m/7m 各打 20 发，散布半径 < 30mm 才算静态合格。",
+          "<b>弹道表验证</b>：实测各距离落点，和表对比，误差 > 20mm 就重标 v0/k。",
+          "<b>延迟实测</b>：用 LED 闪烁 + 高速摄像，测「目标动 → 云台动」的端到端延迟。> 50ms 必须优化。",
+          "<b>动态命中率</b>：小陀螺靶，3m/5m 记命中率。这是 RM 视觉的最终 KPI。"
+        ]),
+        H.sub("常见症状速查"),
+        H.table("症状诊断表", ["症状", "九成是", "一成是"], [
+          ["静态打得准，动态打不中", "延迟大 / 预测没开", "EKF 参数烂"],
+          ["近距离准，远距离偏", "弹道表没标好 / 内参差", "装甲板分类错误"],
+          ["忽左忽右随机偏", "坐标系不统一 / 时间戳没对齐", "串口丢帧"],
+          ["云台抽搐", "阈值闪烁 / 目标频繁切换", "电机 PID 不稳"]
+        ])
+      ]},
+      { id: "rmv-team", title: "第 9 章 视觉组带队手册", blocks: [
+        H.p("师父退休前最后的私货——视觉组怎么带："),
+        H.ul([
+          "<b>新人第一周</b>：跑通官方开源（如 rm_vision），理解每一行。别急着创新。",
+          "<b>新人第一个月</b>：手写完整流水线（从二值化到串口发送），不带 copy。",
+          "<b>赛前一个月</b>：冻结代码，只调参数不改架构。<b>赛场上改代码 = 自杀。</b>",
+          "<b>文档强制</b>：坐标系定义、弹道参数、串口协议——三份文档没写完不许碰代码。",
+          "<b>备件冗余</b>：相机×2、镜头×2、灯×4、网线×3。赛场上没有「等快递」。",
+          "<b>复盘文化</b>：每场录像 + 每次失误归档。三年后这些档案就是队伍的护城河。"
+        ]),
+        H.note("master", "结业标准", "以下全部做到，你就能独当一面带视觉组了：①徒手写出完整装甲板检测 ②讲清楚 PnP 每个参数的含义 ③弹道表自己标定并验证 ④端到端延迟测出来并优化到 50ms 内 ⑤把整套系统教给下一个徒弟。")
+      ]},
+    ]},
+  ]
+};
+</script>
+<script src="assets/js/practice-db.js"></script>
+<script src="assets/js/practice-db-b.js"></script>
+</body>
+</html>

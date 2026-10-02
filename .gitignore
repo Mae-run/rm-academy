@@ -1,0 +1,56 @@
+# ========================
+# 依赖与构建产物
+# ========================
+node_modules/
+desktop/node_modules/
+desktop/build/
+desktop/dist/
+release/win-unpacked/
+desktop/release/
+*.asar
+*.7z
+builder-debug.yml
+
+# ========================
+# 开发/调试产物
+# ========================
+_tools/
+*.log
+shot-*.png
+end-*.png
+dom-*.js
+smoke-*.js
+verify-package.js
+audit*.txt
+smoke-out.txt
+feat-out.txt
+
+# ========================
+# 系统与编辑器
+# ========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========================
+# 环境/密钥
+# ========================
+.env
+*.pem
+id_rsa
+*.key
+
+# ========================
+# 便携版 exe（体积太大不进 git，走 Release 附件）
+# ========================
+release/*.exe
+
+# ========================
+# 临时
+# ========================
+*.tmp
+*.bak
+~$*

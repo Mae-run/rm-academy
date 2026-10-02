@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>ROS 2 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet\" href=\"assets/css/premium.css\">
+</head>
+<body data-page="ros2">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script src="assets/js/practice-db.js"></script>
+<script src="assets/js/practice-db-b.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "ros2",
+  title: "ROS 2",
+  badge: "FRAMEWORK",
+  crumb: "ROS 2 · 机器人通信骨架",
+  lead: "ROS 2 不是语言，是<b>机器人软件的「通信骨架」</b>：把相机、算法、控制、UI 拆成独立节点，用话题/服务互相说话。你学的 C++ 在这里落地成 rclcpp 节点，Python 则写工具和 launch。学完你能搭起一套完整的 RM 视觉系统。",
+  prev: { href: "linux.html", label: "Linux" },
+  next: { href: "rm-embedded.html", label: "RM 电控 →" },
+
+  stages: [
+    { id: "stage-ros-1", title: "第一阶段 · 认识骨架", chapters: [
+      { id: "ros2-why", title: "第 1 章 为什么 RM 视觉用 ROS 2", blocks: [
+        H.sub("不用 ROS 2 行不行？"),
+        H.p("行——很多队就是「一个大 main.cpp 从相机读到串口写」。但队伍一大、功能一多，就变成谁也不敢动的屎山。ROS 2 的价值："),
+        H.ul([
+          "<b>解耦</b>：相机节点、检测节点、跟踪节点、通信节点各干各的，换相机只改一个节点",
+          "<b>复用</b>：rosbag 录一遍现场，回办公室慢慢调（不用真机器人在场）",
+          "<b>生态</b>：TF 坐标变换、可视化 rviz、参数管理、日志——白嫖整个社区",
+          "<b>实时性</b>：DDS 底层可配置 QoS，比 ROS 1 的 TCP 强得多"
+        ]),
+        H.sub("一张图看懂节点世界"),
+        H.code("text", "RM 视觉系统的节点图", [
+          "┌──────────┐  image_raw   ┌──────────┐  detections  ┌──────────┐",
+          "│ 相机节点  │ ──────────→ │ 检测节点  │ ──────────→  │ 跟踪节点  │",
+          "└──────────┘  (话题发布)  └──────────┘   (话题发布)  └──────────┘",
+          "                                                        │ target",
+          "                                                        ↓",
+          "┌──────────┐  cmd_vel    ┌──────────┐  串口帧     ┌──────────┐",
+          "│ 解算节点  │ ←────────── │ 预测节点  │ ────────→  │ 电控通信  │ ──→ C 板",
+          "└──────────┘  (订阅)     └──────────┘  (话题/串口) └──────────┘"
+        ].join("\n")),
+        H.note("master", "师父的经验", "ROS 2 的开销（DDS、序列化）在 NUC/树莓派上不是问题，但<b>别在 C 板上跑 ROS 2</b>——那是 FreeRTOS 的地盘。分界线：上位机（视觉/决策）用 ROS 2，下位机（实时控制）裸机/RTOS + 串口或 USB 连接。"),
+      ]},
+      { id: "ros2-setup", title: "第 2 章 环境搭建（Ubuntu 22.04 + Humble）", blocks: [
+        H.sub("装系统与 ROS 2"),
+        H.code("bash", "install.ros2", [
+          "# Ubuntu 22.04 是 ROS 2 Humble 的官方搭档（RM 队标配）",
+          "",
+          "# ① 添加 ROS 2 源并安装（官网步骤，这里给关键命令）",
+          "sudo apt install software-properties-common",
+          "sudo add-apt-repository universe",
+          "sudo apt update && sudo apt install ros-humble-desktop",
+          "",
+          "# ② 环境变量（每次开终端自动 source）",
+          "echo 'source /opt/ros/humble/setup.bash' >> ~/.bashrc",
+          "source ~/.bashrc",
+          "",
+          "# ③ 验证",
+          "ros2 --help",
+          "ros2 topic list          # 能列话题就通了"
+        ].join("\n")),
+        H.sub("工作空间布局（标准三件套）"),
+        H.code("bash", "ws_layout", [
+          "~/rm_ws/",
+          "├── src/                          # 你的代码都在这",
+          "│   ├── rm_vision/                # 一个功能包",
+          "│   │   ├── CMakeLists.txt",
+          "│   │   ├── package.xml",
+          "│   │   ├── src/detector_node.cpp",
+          "│   │   └── msg/Detection.msg",
+          "│   └── rm_interfaces/            # 消息定义包（专职放接口）",
+          "└── build/ install/ log/          # colcon 自动生成，别手动碰"
+        ].join("\n")),
+        H.code("bash", "build", [
+          "cd ~/rm_ws",
+          "colcon build --symlink-install     # 构建（改 Python 不用重编）",
+          "source install/setup.bash          # 让当前终端认识新包",
+          "ros2 run rm_vision detector_node   # 跑节点"
+        ].join("\n")),
+        H.note("tip", "多终端协作", "每个新终端都要 <code class='inline'>source install/setup.bash</code>。嫌烦就在 ~/.bashrc 里加自动判断：常用别名 <code class='inline'>alias cb='colcon build --symlink-install && source install/setup.bash'</code>。"),
+      ]},
+      { id: "ros2-concepts", title: "第 3 章 核心概念：节点 / 话题 / 服务 / 参数", blocks: [
+        H.sub("节点 Node：一个进程里的独立单元"),
+        H.p("节点 = 机器人系统里的一个「器官」（相机、检测器、控制器各是一个节点）。每个节点有唯一名字，独立启动、独立崩溃、互不影响。"),
+        H.sub("话题 Topic：单向广播（最常用）★★★"),
+        H.code("text", "话题模型", [
+          "发布者 Publisher                    订阅者 Subscriber",
+          "     │                                   ▲",
+          "     │   ┌─────────────────────┐         │",
+          "     └──→│  话题 /image_raw     │─────────┘",
+          "         │  消息类型 Image      │   （可以有任意多个订阅者）",
+          "         └─────────────────────┘",
+          "",
+          "特点：异步、单向、一对多。发布者不知道谁在听，发完就走。",
+          "类比：广播电台（话题）vs 收音机（订阅者）"
+        ].join("\n")),
+        H.sub("服务 Service：一问一答"),
+        H.code("text", "服务模型", [
+          "客户端 Client                     服务端 Server",
+          "     │  ── 请求(Request) ──→         │",
+          "     │  ←── 响应(Response) ──        │",
+          "",
+          "特点：同步、双向、一对一。适合「做一件事并要结果」。",
+          "类比：函数调用（跨进程版）。RM 里：请求标定参数、触发自检、切换模式"
+        ].join("\n")),
+        H.table("话题 vs 服务", ["维度", "话题", "服务"], [
+          ["方向", "单向广播", "双向问答"],
+          ["时机", "异步（发布者想发就发）", "同步（客户端等结果）"],
+          ["数量", "1 对 N", "1 对 1"],
+          ["典型", "图像流、状态流、指令流", "自检、标定、模式切换"]
+        ]),
+        H.sub("参数 Parameter：节点的旋钮"),
+        H.p("每个节点可以挂一堆参数（HSV 阈值、PID 系数、话题名），启动时从 YAML 或命令行注入，运行中还能动态改——<b>调参不用重新编译</b>。"),
+        H.quiz({
+          q: "相机图像流应该用话题还是服务？为什么？",
+          tag: "随堂测",
+          opts: ["服务，因为要拿到图像", "话题：持续单向数据流，发布者不关心谁来听", "都行", "参数"],
+          ans: 1,
+          explain: "图像是典型的高频单向流：发布者只管发，多个消费者（显示、检测、录包）各取所需。服务适合低频、需要明确结果的请求。"
+        }),
+      ]},
+      { id: "ros2-first-node", title: "第 4 章 第一个节点：发布者 + 订阅者 ★★★", blocks: [
+        H.sub("发布者（rclcpp）"),
+        H.code("cpp", "minimal_publisher.cpp", [
+          "#include <rclcpp/rclcpp.hpp>",
+          "#include <std_msgs/msg/string.hpp>",
+          "",
+          "class MinimalPublisher : public rclcpp::Node {",
+          "public:",
+          "    MinimalPublisher() : Node(\"minimal_publisher\"), count_(0) {",
+          "        // ① 创建发布者：话题名 + 队列深度",
+          "        pub_ = create_publisher<std_msgs::msg::String>(\"chatter\", 10);",
+          "",
+          "        // ② 定时器驱动发布（500ms 一次）",
+          "        timer_ = create_wall_timer(",
+          "            std::chrono::milliseconds(500),",
+          "            [this]() {",
+          "                auto msg = std_msgs::msg::String();",
+          "                msg.data = \"hello \" + std::to_string(count_++);",
+          "                pub_->publish(msg);",
+          "            });",
+          "    }",
+          "private:",
+          "    size_t count_;",
+          "    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_;   // 智能指针持有",
+          "    rclcpp::TimerBase::SharedPtr timer_;",
+          "};",
+          "",
+          "int main(int argc, char *argv[]) {",
+          "    rclcpp::init(argc, argv);",
+          "    rclcpp::spin(std::make_shared<MinimalPublisher>());   // 事件循环",
+          "    rclcpp::shutdown();",
+          "    return 0;",
+          "}"
+        ].join("\n")),
+        H.sub("订阅者（回调用 lambda）"),
+        H.code("cpp", "minimal_subscriber.cpp", [
+          "#include <rclcpp/rclcpp.hpp>",
+          "#include <std_msgs/msg/string.hpp>",
+          "",
+          "class MinimalSubscriber : public rclcpp::Node {",
+          "public:",
+          "    MinimalSubscriber() : Node(\"minimal_subscriber\") {",
+          "        sub_ = create_subscription<std_msgs::msg::String>(",
+          "            \"chatter\", 10,",
+          "            [this](const std_msgs::msg::String::SharedPtr msg) {",
+          "                RCLCPP_INFO(get_logger(), \"heard: %s\", msg->data.c_str());",
+          "            });",
+          "    }",
+          "private:",
+          "    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_;",
+          "};"
+        ].join("\n")),
+        H.sub("命令行验证三件套"),
+        H.code("bash", "verify", [
+          "# 终端 1：跑发布者",
+          "ros2 run rm_vision minimal_publisher",
+          "",
+          "# 终端 2：偷听话题（最常用的调试手段）",
+          "ros2 topic echo /chatter",
+          "",
+          "# 终端 3：看话题清单和详情",
+          "ros2 topic list",
+          "ros2 topic info /chatter          # 发布者/订阅者数量",
+          "ros2 topic hz /image_raw          # 频率（查相机掉帧必备！）"
+        ].join("\n")),
+        H.note("master", "三个习惯", "① 节点成员（发布者/订阅者/定时器）一律 SharedPtr 成员——否则被销毁通信就断；② 回调里别做重活（>10ms 就该丢队列或开线程）；③ <code class='inline'>ros2 topic hz</code> 和 <code class='inline'>echo</code> 是你的听诊器，每天都要用。"),
+        H.pracRef("ros-p1"),
+        H.pracRef("ros-p2"),
+      ]},
+    ]},
+
+    { id: "stage-ros-2", title: "第二阶段 · 消息与通信进阶", chapters: [
+      { id: "ros2-msg", title: "第 5 章 消息类型与自定义 msg ★★★", blocks: [
+        H.sub("常用内置消息"),
+        H.table("常用消息类型", ["类型", "字段", "RM 场景"], [
+          ["std_msgs/String", "data", "调试消息"],
+          ["std_msgs/Header", "stamp + frame_id", "时间戳与坐标系（几乎所有消息都有）"],
+          ["sensor_msgs/Image", "Header + height/width/encoding + data[]", "相机图像"],
+          ["sensor_msgs/Imu", "角速度/线加速度/姿态", "IMU 数据"],
+          ["geometry_msgs/Point", "x, y, z", "目标位置"],
+          ["geometry_msgs/PointStamped", "Header + Point", "带坐标系的目标点（视觉输出标配）"]
+        ]),
+        H.sub("自定义消息：三步走"),
+        H.code("text", "Detection.msg", [
+          "# rm_interfaces/msg/Detection.msg",
+          "std_msgs/Header header",
+          "float64[] centers_x        # 各目标中心 x（像素）",
+          "float64[] centers_y        # 各目标中心 y（像素）",
+          "float64[] distances        # 距离（米）",
+          "string     target_type     # \"armor\" / \"rune\""
+        ].join("\n")),
+        H.p("第二步：包配置（package.xml + CMakeLists.txt）。接口单独放一个包（rm_interfaces），别的包依赖它，避免循环依赖："),
+        H.code("xml", "package.xml", [
+          "<!-- rm_interfaces/package.xml 关键行 -->",
+          "<depend>std_msgs</depend>",
+          "<buildtool_depend>rosidl_default_generators</buildtool_depend>",
+          "<member_of_group>rosidl_default_generators</member_of_group>",
+          "<exec_depend>rosidl_default_runtime</exec_depend>"
+        ].join("\n")),
+        H.code("cmake", "CMakeLists.txt", [
+          "# rm_interfaces/CMakeLists.txt 关键行",
+          "find_package(rosidl_default_generators REQUIRED)",
+          "rosidl_generate_interfaces(${PROJECT_NAME}",
+          "  \"msg/Detection.msg\"",
+          ")"
+        ].join("\n")),
+        H.p("第三步：编译后在别的包里像内置消息一样用：<code class='inline'>#include \"rm_interfaces/msg/detection.hpp\"</code>。"),
+        H.note("tip", "为什么单独建接口包", "A 包定义消息、B 包用——没问题。但 A 定义消息又用 B 的消息 → 循环依赖，编译直接死。接口独立成包，是社区血泪教训。"),
+        H.pracRef("ros-p3"),
+      ]},
+      { id: "ros2-topic", title: "第 6 章 话题进阶：QoS 与时间戳", blocks: [
+        H.sub("QoS：通信质量的三要素"),
+        H.code("cpp", "qos.cpp", [
+          "rclcpp::QoS qos(10);                       // 队列深度",
+          "qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);   // 尽力而为",
+          "qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);",
+          "",
+          "auto sub = create_subscription<Image>(\"image_raw\", qos, cb);",
+          "",
+          "/* 图像流为什么用 BEST_EFFORT？",
+          " * RELIABLE 会重传丢包 → 旧帧堆积 → 处理延迟越滚越大",
+          " * 图像丢了就丢了，我们要的是「最新」，不是「完整」 */"
+        ].join("\n")),
+        H.table("QoS 速查", ["设置", "含义", "场景"], [
+          ["RELIABLE", "可靠传输（重传）", "指令、参数、低频关键数据"],
+          ["BEST_EFFORT", "尽力而为（可丢）", "<b>图像流</b>、高频传感器"],
+          ["队列深度", "积压多少条", "小队列 = 及时丢弃旧数据"]
+        ]),
+        H.sub("时间戳：数据同步的命脉"),
+        H.code("cpp", "timestamp.cpp", [
+          "auto msg = std::make_shared<PointStamped>();",
+          "msg->header.stamp = this->now();        // 打时间戳",
+          "msg->header.frame_id = \"camera\";      // 打坐标系",
+          "",
+          "/* 为什么重要：",
+          " * ① 融合 IMU 和图像时，两帧数据要对齐时间戳（差 10ms 弹道就歪了）",
+          " * ② TF 查询按时间插值，没戳的数据没法变换",
+          " * ③ 回放 bag 时用 --clock，节点要用 header.stamp 而不是墙上时钟 */"
+        ].join("\n")),
+        H.note("warn", "相机的坑", "相机驱动节点要把<b>曝光时刻</b>的时间戳打进 header.stamp，而不是「处理完才打」。RM 视觉精度命门之一——慢 10ms，3m 外差 3cm，直接脱靶。"),
+      ]},
+      { id: "ros2-service", title: "第 7 章 服务与参数实战", blocks: [
+        H.sub("服务端与客户端"),
+        H.code("cpp", "service.cpp", [
+          "#include <example_interfaces/srv/add_two_ints.hpp>",
+          "",
+          "class AddServer : public rclcpp::Node {",
+          "public:",
+          "    AddServer() : Node(\"add_server\") {",
+          "        srv_ = create_service<example_interfaces::srv::AddTwoInts>(",
+          "            \"add_two_ints\",",
+          "            [this](const std::shared_ptr<Request> req,",
+          "                   std::shared_ptr<Response> res) {",
+          "                res->sum = req->a + req->b;",
+          "            });",
+          "    }",
+          "private:",
+          "    rclcpp::Service<example_interfaces::srv::AddTwoInts>::SharedPtr srv_;",
+          "};"
+        ].join("\n")),
+        H.code("bash", "service_cli", [
+          "# 命令行直接调服务（调试神器）",
+          "ros2 service list",
+          "ros2 service call /add_two_ints example_interfaces/srv/AddTwoInts",
+          "  \"{a: 3, b: 5}\""
+        ].join("\n")),
+        H.sub("参数：声明 → 读取 → 覆盖"),
+        H.code("cpp", "params.cpp", [
+          "class DetectorNode : public rclcpp::Node {",
+          "public:",
+          "    DetectorNode() : Node(\"detector_node\") {",
+          "        // 声明（带默认值）",
+          "        declare_parameter<int>(\"hsv_low_h\", 90);",
+          "        declare_parameter<int>(\"hsv_high_h\", 120);",
+          "        declare_parameter<double>(\"max_dist\", 8.0);",
+          "",
+          "        // 读取",
+          "        hsv_low_  = get_parameter(\"hsv_low_h\").get_value<int>();",
+          "        hsv_high_ = get_parameter(\"hsv_high_h\").get_value<int>();",
+          "",
+          "        // 动态参数回调（运行中改，立即生效）",
+          "        param_cb_ = add_on_set_parameters_callback(",
+          "            [this](const std::vector<rclcpp::Parameter> &params) {",
+          "                for (auto &p : params) {",
+          "                    if (p.get_name() == \"hsv_low_h\")",
+          "                        hsv_low_ = p.get_value<int>();",
+          "                }",
+          "                rcl_interfaces::msg::SetParametersResult result;",
+          "                result.successful = true;",
+          "                return result;",
+          "            });",
+          "    }",
+          "private:",
+          "    int hsv_low_, hsv_high_;",
+          "    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;",
+          "};"
+        ].join("\n")),
+        H.code("bash", "params_cli", [
+          "# 命令行覆盖参数",
+          "ros2 run rm_vision detector_node --ros-args -p hsv_low_h:=80",
+          "",
+          "# YAML 文件批量给（launch 里挂载）",
+          "ros2 run rm_vision detector_node --ros-args \\",
+          "    --params-file config/hsv.yaml"
+        ].join("\n")),
+        H.note("master", "调参工作流", "把所有可调参数（HSV、PID、距离阈值）全部 declare 出来 → 存 YAML → 现场 <code class='inline'>ros2 param set</code> 动态调 → 满意后写回 YAML 提交。<b>硬编码在代码里的魔法数字是调参地狱的开始。</b>"),
+        H.pracRef("ros-p5"),
+        H.pracRef("ros-p6"),
+      ]},
+    ]},
+
+    { id: "stage-ros-3", title: "第三阶段 · 坐标系统与工具链", chapters: [
+      { id: "ros2-tf", title: "第 8 章 TF2：坐标变换的图书馆 ★★★", blocks: [
+        H.sub("TF 树：机器人的「骨架名册」"),
+        H.code("text", "RM 机器人 TF 树", [
+          "map                    (世界坐标)",
+          " └── odom              (里程计)",
+          "      └── base_link    (车体中心)",
+          "           ├── camera_optical   (相机光学系)",
+          "           └── gimbal           (云台)",
+          "                └── gun          (枪管系)",
+          "",
+          "每个箭头 = 一个 3D 变换（平移 + 旋转），带时间戳",
+          "任何两个 frame 之间的变换，TF2 自动沿树插值算出来"
+        ].join("\n")),
+        H.sub("发布与查询"),
+        H.code("cpp", "tf_basics.cpp", [
+          "// 静态变换（安装位置，一次发布永久有效）：命令行就能发",
+          "// ros2 run tf2_ros static_transform_publisher \\",
+          "//   0.1 0 0.2 0 0 0 base_link camera_optical",
+          "",
+          "// 动态变换（云台转动，持续发布）",
+          "#include <tf2_ros/transform_broadcaster.h>",
+          "",
+          "geometry_msgs::msg::TransformStamped t;",
+          "t.header.stamp = this->now();",
+          "t.header.frame_id = \"base_link\";",
+          "t.child_frame_id = \"gimbal\";",
+          "t.transform.translation.z = 0.15;",
+          "tf2::Quaternion q;",
+          "q.setRPY(0, pitch, yaw);            // 云台当前姿态",
+          "t.transform.rotation = tf2::toMsg(q);",
+          "tf_broadcaster_->sendTransform(t);"
+        ].join("\n")),
+        H.code("cpp", "tf_query.cpp", [
+          "// 查询：任意两个 frame 间的变换",
+          "try {",
+          "    auto tf = tf_buffer_->lookupTransform(",
+          "        \"gun\",                    // 目标坐标系",
+          "        \"camera_optical\",         // 源坐标系",
+          "        msg->header.stamp);        // 用数据的时间戳（不是 now！）",
+          "    /* tf.transform 里就是 camera→gun 的平移+旋转 */",
+          "} catch (const tf2::TransformException &e) {",
+          "    RCLCPP_WARN(get_logger(), \"TF 查询失败: %s\", e.what());",
+          "}"
+        ].join("\n")),
+        H.note("pitfall", "查 TF 用数据的时间戳", "用 <code class='inline'>now()</code> 查「现在」的变换，但图像是 20ms 前拍的——用错时刻的云台姿态，3m 外又差 3cm。视觉节点查 TF 一律用 <code class='inline'>msg->header.stamp</code>。"),
+        H.pracRef("ros-p10"),
+        H.pracRef("ros-p11"),
+      ]},
+      { id: "ros2-launch", title: "第 9 章 launch：一键启动整个系统", blocks: [
+        H.code("python", "rm_vision.launch.py", [
+          "from launch import LaunchDescription",
+          "from launch_ros.actions import Node",
+          "from ament_index_python.packages import get_package_share_directory",
+          "import os",
+          "",
+          "def generate_launch_description():",
+          "    pkg_share = get_package_share_directory('rm_vision')",
+          "    params_file = os.path.join(pkg_share, 'config', 'params.yaml')",
+          "",
+          "    camera = Node(",
+          "        package='rm_vision',",
+          "        executable='camera_node',",
+          "        output='screen',",
+          "        parameters=[params_file],       # 挂参数文件",
+          "    )",
+          "    detector = Node(",
+          "        package='rm_vision',",
+          "        executable='detector_node',",
+          "        output='screen',",
+          "        parameters=[params_file],",
+          "    )",
+          "    serial = Node(",
+          "        package='rm_vision',",
+          "        executable='serial_node',",
+          "        output='screen',",
+          "    )",
+          "    return LaunchDescription([camera, detector, serial])"
+        ].join("\n")),
+        H.code("bash", "launch_cli", [
+          "ros2 launch rm_vision rm_vision.launch.py",
+          "",
+          "# launch 的好处：",
+          "# ① 一条命令拉起 5 个节点（不用开 5 个终端）",
+          "# ② 参数统一从 YAML 注入",
+          "# ③ 一个节点崩了，launch 能自动重启（respawn=True）"
+        ].join("\n")),
+        H.pracRef("ros-p4"),
+      ]},
+      { id: "ros2-bag", title: "第 10 章 rosbag2：离线调试神器 ★★★", blocks: [
+        H.code("bash", "rosbag", [
+          "# 现场录制（打比赛前一定录！）",
+          "ros2 bag record -o match_01 /image_raw /detections /imu/data",
+          "",
+          "# 回办公室看",
+          "ros2 bag info match_01              # 有什么话题、多长时间、多少条",
+          "",
+          "# 回放：先启动处理节点，再回放数据",
+          "ros2 bag play match_01",
+          "",
+          "# 常用选项",
+          "ros2 bag play match_01 --rate 0.5   # 半速慢放（看细节）",
+          "ros2 bag play match_01 --loop       # 循环播放",
+          "ros2 bag play match_01 --start-offset 30   # 跳到第 30 秒"
+        ].join("\n")),
+        H.note("master", "调车铁律", "<b>现场能复现的问题，一定录 bag 带回来</b>。回放一千遍慢慢分析，比在现场对着乱跳的机器人瞎猜强百倍。ROS 2 视觉组的工作方式就是：现场采集 → 离线分析 → 改代码 → 回放验证 → 下次现场验证。"),
+        H.pracRef("ros-p12"),
+      ]},
+      { id: "ros2-custom-msg", title: "第 11 章 综合实战：图像处理流水线", blocks: [
+        H.p("把前面学的全部串起来：相机 → 检测 → 输出目标点。这是 RM 视觉的最小可运行骨架："),
+        H.code("cpp", "pipeline_node.cpp", [
+          "#include <rclcpp/rclcpp.hpp>",
+          "#include <sensor_msgs/msg/image.hpp>",
+          "#include <geometry_msgs/msg/point_stamped.hpp>",
+          "#include <cv_bridge/cv_bridge.h>",
+          "#include <opencv2/opencv.hpp>",
+          "",
+          "class PipelineNode : public rclcpp::Node {",
+          "public:",
+          "    PipelineNode() : Node(\"pipeline_node\") {",
+          "        // 订阅原始图像：BEST_EFFORT（图像流可丢帧）",
+          "        rclcpp::QoS img_qos(1);",
+          "        img_qos.reliability(RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT);",
+          "",
+          "        sub_ = create_subscription<sensor_msgs::msg::Image>(",
+          "            \"image_raw\", img_qos,",
+          "            [this](const sensor_msgs::msg::Image::SharedPtr msg) {",
+          "                on_image(msg);",
+          "            });",
+          "",
+          "        pub_ = create_publisher<geometry_msgs::msg::PointStamped>(",
+          "            \"target\", 10);",
+          "    }",
+          "",
+          "private:",
+          "    void on_image(const sensor_msgs::msg::Image::SharedPtr msg) {",
+          "        auto t0 = this->now();",
+          "",
+          "        // ① ROS 消息 → OpenCV 矩阵",
+          "        cv::Mat img = cv_bridge::toCvCopy(msg, \"bgr8\")->image;",
+          "",
+          "        // ② 处理流水线",
+          "        cv::Mat gray, binary;",
+          "        cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);",
+          "        cv::threshold(gray, binary, 100, 255, cv::THRESH_BINARY);",
+          "        std::vector<std::vector<cv::Point>> contours;",
+          "        cv::findContours(binary, contours,",
+          "                         cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);",
+          "",
+          "        // ③ 找最大轮廓 → 发目标点",
+          "        if (!contours.empty()) {",
+          "            auto biggest = *std::max_element(",
+          "                contours.begin(), contours.end(),",
+          "                [](auto &a, auto &b) {",
+          "                    return cv::contourArea(a) < cv::contourArea(b);",
+          "                });",
+          "            auto m = cv::moments(biggest);",
+          "            if (m.m00 > 100) {",
+          "                geometry_msgs::msg::PointStamped pt;",
+          "                pt.header = msg->header;        // 继承时间戳与坐标系",
+          "                pt.point.x = m.m10 / m.m00;",
+          "                pt.point.y = m.m01 / m.m00;",
+          "                pub_->publish(pt);",
+          "            }",
+          "        }",
+          "",
+          "        // ④ 打点：处理耗时（性能监控从第一行代码开始）",
+          "        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000,",
+          "            \"pipeline: %.1f ms\",",
+          "            (this->now() - t0).seconds() * 1000.0);",
+          "    }",
+          "",
+          "    rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr sub_;",
+          "    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr pub_;",
+          "};"
+        ].join("\n")),
+        H.note("master", "这个骨架吃透了，ROS 2 就出师了", "重点检查你是否懂：QoS 为什么 BEST_EFFORT、header 为什么要继承、回调里耗时打点、RCLCPP_INFO_THROTTLE 节流日志、max_element + lambda 找最大轮廓。每个「为什么」都能答上，你就能独立写视觉节点了。"),
+        H.pracRef("ros-p7"),
+        H.pracRef("ros-p8"),
+      ]},
+      { id: "ros2-cv-bridge", title: "第 12 章 cv_bridge 深入与多线程", blocks: [
+        H.sub("cv_bridge 的两张脸"),
+        H.code("cpp", "cv_bridge.cpp", [
+          "// toCvCopy：拷贝一份，随便改（安全，略慢）",
+          "auto cv_ptr = cv_bridge::toCvCopy(msg, \"bgr8\");",
+          "cv_ptr->image.setTo(0);            // 改副本，原消息不动",
+          "",
+          "// toCvShare：零拷贝共享，只读！改了就是 UB",
+          "auto cv_ptr2 = cv_bridge::toCvShare(msg, \"bgr8\");",
+          "// cv_ptr2->image.at<uint8_t>(0,0) = 0;   // 禁止！",
+          "",
+          "/* 性能敏感路径（每帧 100 次）用 share + 不改；",
+          " * 要在图上画框、做处理 → copy */"
+        ].join("\n")),
+        H.sub("多线程执行器：回调并发"),
+        H.code("cpp", "mt_executor.cpp", [
+          "// 默认单线程 spin：所有回调排队串行（简单安全）",
+          "rclcpp::spin(node);",
+          "",
+          "// 多线程：回调可能并发执行 → 共享数据要加锁",
+          "rclcpp::executors::MultiThreadedExecutor executor;",
+          "executor.add_node(node);",
+          "executor.spin();",
+          "",
+          "/* 回调组（CallbackGroup）：",
+          " * MutuallyExclusive（默认）：同组回调互斥串行",
+          " * Reentrant：允许并发",
+          " * 组合玩法师父的忠告：先单线程跑对，再上多线程优化 */"
+        ].join("\n")),
+        H.pracRef("ros-p9"),
+      ]},
+      { id: "ros2-realtime", title: "第 13 章 性能与工程化清单", blocks: [
+        H.sub("性能优化三板斧"),
+        H.ul([
+          "<b>测量先行</b>：每帧打处理耗时，ros2 topic hz 看频率——不测量就优化是瞎搞",
+          "<b>降分辨率</b>：1080p→720p 直接省一半算力，检测精度损失通常可接受",
+          "<b>算法分层</b>：全图低频找目标 → ROI 高频跟踪（省 5~10 倍算力）"
+        ]),
+        H.sub("工程化清单（比赛前过一遍）"),
+        H.ul([
+          "所有可调参数进 YAML，代码里零魔法数字",
+          "所有节点日志有节流（INFO_THROTTLE），防止刷屏拖慢系统",
+          "串口通信有超时和重连逻辑",
+          "相机节点崩掉 → launch respawn 自动重启",
+          "目标丢失有状态机（TRACKING→PREDICT→LOST），不会疯狂输出发射指令",
+          "bag 录制脚本一键启动，比赛间隙录数据"
+        ]),
+        H.note("master", "结课", "ROS 2 的内容看起来多，核心就是<b>「节点用话题传消息，参数调优，TF 管坐标，launch 管启动，bag 管回放」</b>五件事。把这五件事练成肌肉记忆，你就能在视觉组独立扛一个模块了。"),
+      ]},
+    ]},
+  ]
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+/* ============================================================
+   RM 兵工厂 · Premium 皮肤（高级感精修层）
+   挂载在 style.css 之上，仅做视觉增强，不动布局逻辑
+   ============================================================ */
+
+/* ---------- 字体升级 ---------- */
+body {
+  font-family: "HarmonyOS Sans SC", "MiSans", "OPPOSans", var(--sans);
+  letter-spacing: .1px;
+}
+
+/* ---------- 环境光晕背景 ---------- */
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(900px 500px at 12% -8%, rgba(63, 155, 255, .075), transparent 60%),
+    radial-gradient(800px 480px at 95% 12%, rgba(255, 138, 61, .055), transparent 60%),
+    radial-gradient(700px 500px at 50% 108%, rgba(63, 214, 140, .05), transparent 60%);
+  pointer-events: none;
+}
+html[data-theme="light"] body::before { opacity: .55; }
+
+/* ---------- 顶栏玻璃拟态 ---------- */
+.topbar {
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: 0 1px 24px rgba(0, 0, 0, .22);
+}
+.topbar .logo .logo-icon {
+  background: linear-gradient(135deg, var(--accent-deep, #2e8ba6), var(--accent, #59b8d1) 55%, var(--accent, #59b8d1));
+  box-shadow: 0 2px 14px rgba(63, 155, 255, .4);
+}
+.topbar nav a {
+  position: relative;
+  border-radius: 8px;
+  padding: 5px 10px;
+  transition: color .15s, background .15s;
+}
+.topbar nav a:hover { text-decoration: none; background: rgba(63, 155, 255, .10); }
+.topbar nav a.active {
+  color: var(--accent);
+}
+.topbar nav a.active::after {
+  content: "";
+  position: absolute; left: 10px; right: 10px; bottom: -1px;
+  height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+/* ---------- 卡片悬浮光效 ---------- */
+.course-card, .phase, .note, .pd-card, .practice, .codeblock {
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.course-card:hover, .phase:hover {
+  transform: translateY(-2px);
+  border-color: rgba(63, 155, 255, .45);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .32), 0 0 0 1px rgba(63, 155, 255, .12);
+}
+.practice:hover {
+  border-color: rgba(63, 155, 255, .35);
+  box-shadow: 0 6px 26px rgba(0, 0, 0, .28);
+}
+.practice.practiced { border-color: rgba(63, 214, 140, .45); }
+
+/* ---------- 精选题徽章强化 ---------- */
+.practice.premium-feat { position: relative; overflow: hidden; }
+.practice.premium-feat::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255, 204, 85, .8), transparent);
+}
+
+/* ---------- 代码块精修 ---------- */
+.codeblock {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03), 0 4px 18px rgba(0, 0, 0, .18);
+}
+.codeblock .code-head {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .045), transparent);
+}
+.codeblock pre {
+  background:
+    radial-gradient(600px 200px at 0% 0%, rgba(63, 155, 255, .04), transparent 70%),
+    var(--bg-code);
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--accent); }
+
+/* ---------- Hero 升级 ---------- */
+.hero {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  overflow: hidden;
+}
+.hero::after {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(500px 220px at 85% 0%, rgba(63, 155, 255, .12), transparent 65%),
+    radial-gradient(400px 200px at 5% 100%, rgba(255, 138, 61, .08), transparent 65%);
+  pointer-events: none;
+}
+.hero .hero-badge {
+  background: linear-gradient(90deg, rgba(255, 138, 61, .16), rgba(63, 155, 255, .16));
+  border-color: rgba(255, 138, 61, .35);
+}
+
+/* ---------- 按钮微交互 ---------- */
+.btn {
+  transition: transform .12s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn.primary {
+  box-shadow: 0 4px 18px rgba(31, 111, 235, .35);
+}
+.btn.primary:hover { box-shadow: 0 6px 24px rgba(31, 111, 235, .5); }
+
+/* ---------- 统计数字动画 ---------- */
+.pd-num, .stat-card .num {
+  background: linear-gradient(180deg, var(--text) 55%, color-mix(in srgb, var(--text) 60%, var(--accent)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ---------- 打印样式保持纯净 ---------- */
+@media print {
+  body::before { display: none; }
+  .prac-toolbar, .topbar, .back-top, .feat-sep { display: none !important; }
+  .practice { break-inside: avoid; }
+}

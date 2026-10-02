@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>控制进阶 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+</head>
+<body data-page="cva">
+<div class="layout"><main class="content"></main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="assets/js/site-index.js"></script>
+<script>
+"use strict";
+
+window.PAGE = {
+  id: "cva",
+  title: "RM 电控 · 控制进阶",
+  badge: "CTRL",
+  crumb: "控制进阶 · 从调参到设计",
+  lead: "PID 会调只是工人，懂<b>为什么</b>才是工程师。这门课把云台控制从「凭手感拧参数」带到「看懂系统本质」：传递函数、前馈、串级、LQR、弹道解算工程化——强队和普通队的分水岭就在这里。<b>数学不吓人，吓人的是不懂数学还硬调。</b>",
+  prev: { href: "rm-embedded.html", label: "RM 电控" },
+  next: { href: "practice.html", label: "练习中心" },
+
+  stages: [
+    { id: "stage-cva-1", title: "第一阶段 · 看懂系统", chapters: [
+      { id: "cva-why", title: "第 1 章 为什么 PID 不够了", blocks: [
+        H.sub("调参调到怀疑人生？"),
+        H.p("纯反馈 PID 有个先天缺陷：<b>它必须先看到误差才纠正</b>。目标在动、系统有延迟、负载在变——PID 永远在追着误差跑，永远慢半拍。这就是你云台「跟得上但打不准」的根源。"),
+        H.table("PID 天花板的三种场景", ["场景", "PID 表现", "出路"], [
+          ["目标快速机动", "相位滞后，弹着点偏移", "前馈补偿"],
+          ["双质量体（电机+枪管）", "单环控制激发谐振", "串级/陷波滤波"],
+          ["强耦合（俯仰影响偏航）", "两环互相打架", "解耦/LQR"]
+        ]),
+        H.note("master", "师父的定位", "PID 是地基不是天花板。这门课不是教你扔掉 PID——<b>是教你什么时候 PID 够用、什么时候必须上更高级的东西</b>。90% 场景 PID + 前馈就够，剩下 10% 才是 LQR 的战场。"),
+        H.quiz({
+          q: "云台纯 PID 跟踪匀速转动的目标，误差恒定不为零。为什么消不掉？",
+          tag: "随堂测",
+          opts: ["参数没调好", "积分项没给够", "纯反馈天生滞后，需要前馈注入速度信息", "传感器精度不够"],
+          ans: 2,
+          explain: "积分项理论上能消恒定误差，但代价是超调和震荡。工程正解是前馈：目标速度已知的部分直接喂给输出，反馈只纠残差——又快又稳。"
+        }),
+        H.prac({
+          id: "cva-p1", level: 1, title: "手写：误差来源分类",
+          body: "把「打移动靶偏 10cm」拆解成误差来源清单：视觉测量误差/跟踪预测误差/控制滞后误差/机械误差/弹道模型误差，每类估计量级和测量方法。",
+          hint: "量级:视觉1~2cm/预测2~4cm/控制1~3cm/机械1~2cm/弹道2~3cm。",
+          solution: H.code("text", "errors.txt", `移动靶偏差 10cm 分解:
+①视觉测量误差 ~1.5cm
+  测法: 静止靶连续100帧检测中心的标准差
+②跟踪预测误差 ~3cm(最大头)
+  测法: 慢速靶OK快速靶偏→差值即预测误差
+③控制滞后误差 ~2cm
+  测法: 阶跃响应, 目标速度×系统延迟(10ms×2m/s)
+④机械误差 ~1.5cm
+  测法: 静止靶弹着点散布
+⑤弹道模型误差 ~2cm
+  测法: 不同距离实测落点vs预测落点
+→ 优先砍②(预测)和⑤(弹道标定),收益最大`) 
+        }),
+      ]},
+      { id: "cva-tf", title: "第 2 章 传递函数：系统的体检报告", blocks: [
+        H.sub("十分钟看懂传递函数"),
+        H.p("传递函数 G(s) 就是系统的「输入输出关系说明书」：<b>输入一个正弦激励，输出会怎么变</b>——幅度放大还是衰减、相位超前还是滞后。看懂它，你就知道系统在什么频率会震荡。"),
+        H.code("text", "云台二阶模型", `直流电机云台的传递函数(简化):
+
+G(s) = K / (J·s² + B·s + K)
+
+J = 转动惯量(枪管越长J越大,响应越肉)
+B = 阻尼(摩擦,越大越稳但越慢)
+K = 刚度/增益
+
+两个关键特征:
+①固有频率 ωn = √(K/J)
+   ——系统天生的"摇摆节奏"
+②阻尼比 ζ = B / (2√(KJ))
+   ζ<1 欠阻尼:超调震荡(云台过冲)
+   ζ=1 临界阻尼:最快无超调(理想)
+   ζ>1 过阻尼:肉(安全但慢)
+
+调 PID 本质 = 改变等效的 K 和 B → 移动 ωn 和 ζ`),
+        H.quiz({
+          q: "云台装上更长枪管（J 增大），固有频率怎么变？",
+          tag: "随堂测",
+          opts: ["变高，响应更快", "变低，响应更肉，且更容易被激励震荡", "不变", "无法判断"],
+          ans: 1,
+          explain: "ωn=√(K/J)，J 增大 ωn 降低——系统天生的节奏变慢。同时电机同样的力矩对更大的惯量加速更慢，阶跃响应时间变长。这就是重武器云台要重新调参的原因。"
+        }),
+        H.prac({
+          id: "cva-p2", level: 2, title: "手写：二阶系统阶跃响应",
+          body: "用 Python 模拟二阶系统 G(s)=ωn²/(s²+2ζωn·s+ωn²)，画 ζ=0.2/0.7/1.0/1.5 四条阶跃响应曲线，标注超调量和调节时间。",
+          hint: "scipy.signal.step 或手写欧拉积分。",
+          solution: H.code("python", "step.py", `import numpy as np
+import matplotlib.pyplot as plt
+
+def step_response(zeta, wn=10.0, t_end=2.0, dt=0.001):
+    t = np.arange(0, t_end, dt)
+    # 离散化二阶系统: y'' + 2ζωn y' + ωn² y = ωn² u
+    y = np.zeros_like(t); dy = 0.0
+    for i in range(1, len(t)):
+        ddy = wn*wn*(1.0 - y[i-1]) - 2*zeta*wn*dy
+        dy += ddy * dt
+        y[i] = y[i-1] + dy * dt
+    return t, y
+
+fig, ax = plt.subplots(figsize=(9, 5))
+for z, c in [(0.2,'r'), (0.7,'g'), (1.0,'b'), (1.5,'m')]:
+    t, y = step_response(z)
+    os = (y.max()-1)*100          # 超调量%
+    ax.plot(t, y, c, label=f"ζ={z} 超调{os:.0f}%")
+ax.axhline(1, ls='--', c='k', alpha=.4)
+ax.set_xlabel("时间(s)"); ax.set_ylabel("响应")
+ax.set_title("二阶系统阶跃响应 vs 阻尼比")
+ax.legend(); ax.grid(alpha=.3)
+plt.savefig("step_response.png", dpi=110)
+# ζ=0.7 是工程最优:超调~5%且上升快`) 
+        }),
+      ]},
+      { id: "cva-ff", title: "第 3 章 前馈：未卜先知的艺术", blocks: [
+        H.sub("反馈看过去，前馈看未来"),
+        H.p("反馈：误差出现了才纠——<b>永远慢一步</b>。前馈：目标要动我提前推——<b>不等误差出现</b>。两者结合是 RM 云台的标配："),
+        H.code("cpp", "ff_pid.cpp", `// 前馈+PID 复合控制(RM 云台标准架构)
+struct FFPID {
+    float kp, ki, kd;
+    float ff_kv;          // 速度前馈增益
+    float ff_ka;          // 加速度前馈增益
+    float integ = 0, prev_err = 0;
+
+    float update(float target, float target_vel, float target_acc,
+                 float measured, float dt) {
+        float err = target - measured;
+
+        // ---- 前馈:直接把目标的运动"喂"给输出 ----
+        // 目标在动,我知道它下一刻在哪,提前给电机这个量
+        float ff = ff_kv * target_vel + ff_ka * target_acc;
+
+        // ---- 反馈:只纠残差 ----
+        float p = kp * err;
+        integ += ki * err * dt;
+        integ = clamp(integ, -ilim, ilim);      // 积分限幅
+        float d = kd * (err - prev_err) / dt;
+        prev_err = err;
+
+        return ff + p + integ + d;
+    }
+};
+// 效果:目标匀速转,ff 项扛起大头,PID 误差≈0
+// PID 只处理"没预料到"的扰动——又快又稳`),
+        H.note("master", "前馈增益怎么定", "速度前馈增益 ff_kv = 1/传动比的理论值起步（目标速度到电机输出的静态映射），然后实测微调：给纯速度前馈（反馈关掉）看跟踪滞后，调整到滞后最小。加速度前馈管「启停瞬间」，一般给速度前馈的 10~30%。"),
+        H.quiz({
+          q: "前馈和反馈最大的本质区别是？",
+          tag: "随堂测",
+          opts: ["前馈更精确", "前馈不依赖误差测量——开环注入，反馈靠误差闭环", "前馈不会震荡", "反馈更慢但更稳"],
+          ans: 1,
+          explain: "前馈是开环的：从目标模型直接算输出，不需要知道系统实际状态。好处零延迟，坏处模型不准就白搭——所以永远前馈+反馈配合：前馈管已知，反馈兜未知。"
+        }),
+        H.prac({
+          id: "cva-p3", level: 3, featured: true, title: "手写：前馈+PID 跟踪对比实验",
+          body: "模拟云台跟踪正弦目标：①纯 PID ②前馈+PID。画跟踪误差曲线对比，量化前馈把误差降了多少倍。",
+          hint: "目标 θ=sin(2πt)，纯反馈相位滞后明显；速度前馈 t 处的导数 2πcos(2πt)。",
+          solution: H.code("python", "ff_sim.py", `import numpy as np
+
+class PID:
+    def __init__(s, kp, ki, kd):
+        s.kp,s.ki,s.kd = kp,ki,kd; s.i=0; s.pe=0
+    def step(s, e, dt):
+        s.i = np.clip(s.i + s.ki*e*dt, -5, 5)
+        d = (e - s.pe)/dt; s.pe = e
+        return s.kp*e + s.i + s.kd*d
+
+dt, T = 0.001, 3.0
+t = np.arange(0, T, dt)
+target = np.sin(2*np.pi*t)                 # 目标正弦
+tvel    = 2*np.pi*np.cos(2*np.pi*t)        # 目标速度(前馈用)
+tacc    = -(2*np.pi)**2 * np.sin(2*np.pi*t)
+
+def simulate(use_ff, ff_kv=1.0, ff_ka=0.15):
+    pid = PID(kp=60, ki=80, kd=2)
+    y, dy = 0.0, 0.0
+    err_hist = []
+    J, B = 0.02, 0.4                         # 云台模型
+    for i in range(len(t)):
+        e = target[i] - y
+        u = pid.step(e, dt)
+        if use_ff:
+            u += ff_kv*tvel[i] + ff_ka*tacc[i]
+        ddy = (u - B*dy) / J                 # 动力学
+        dy += ddy*dt; y += dy*dt
+        err_hist.append(abs(e))
+    return np.array(err_hist)
+
+e1 = simulate(False)
+e2 = simulate(True)
+print(f"纯PID  平均误差 {e1[500:].mean():.4f} rad")
+print(f"前馈+PID 平均误差 {e2[500:].mean():.4f} rad")
+print(f"误差降低 {(1-e2[500:].mean()/e1[500:].mean())*100:.0f}%")
+# 典型结果: 前馈把跟踪误差降 70~90%`) 
+        }),
+      ]},
+      { id: "cva-cascade", title: "第 4 章 串级 PID：分层的世界", blocks: [
+        H.sub("一个环管不过来，就分两层"),
+        H.p("RM 云台标准架构是<b>串级 PID</b>：外环管角度（慢，10ms 周期），内环管角速度（快， 1ms 周期）。内环先把电机变成「完美的速度执行器」，外环再在这个干净的基础上管位置。"),
+        H.code("text", "串级架构", `外环(位置环) 100~200Hz
+  输入: 目标角度 - 当前角度
+  输出: 目标角速度
+        ↓
+内环(速度环) 1kHz
+  输入: 目标角速度 - 当前角速度(陀螺仪)
+  输出: 电机力矩(电流)
+
+为什么比单环强:
+①内环1kHz压制电机扰动(摩擦/反电动势/负载波动)
+  外环完全感觉不到这些
+②带宽分离: 内环带宽>>外环
+  外环看到的是一个"听话的速度源"
+③限幅天然分层: 速度限幅在内环(保护电机)
+  加速度限幅在外环(轨迹平滑)`),
+        H.note("pitfall", "串级调参顺序", "<b>先内后外，内环没调稳禁止动外环</b>：①内环给阶跃速度指令，调到响应快无超调 ②内环闭环后，外环面对的已经是「1ms 级完美速度源」，外环 P 从小往大加 ③外环震荡说明内环带宽不够——回头提高内环而不是压外环。顺序反了调一晚上都是白费。"),
+        H.quiz({
+          q: "串级控制中内环的带宽为什么要远高于外环？",
+          tag: "随堂测",
+          opts: ["省电", "内环要在下一个外环周期前完成整定，外环才能看到理想执行器", "防止CPU过载", "没有原因，惯例而已"],
+          ans: 1,
+          explain: "带宽分离原则：内环带宽≥外环 5~10 倍。内环响应够快，外环采样时刻看到的执行状态已经是稳态——两层解耦各自独立设计。内环慢于外环 = 两环耦合打架，震荡没得救。"
+        }),
+        H.prac({
+          id: "cva-p4", level: 3, title: "手写：串级 PID 仿真",
+          body: "写串级 PID 仿真：内环（速度环 1kHz）+ 外环（位置环 100Hz），对比单环 PID 的阶跃响应和抗扰性（t=2s 突加负载扰动）。",
+          hint: "内环用电机一阶模型；外环 10 个内环周期跑一次。",
+          solution: H.code("python", "cascade.py", `import numpy as np
+
+def clamp(x, lo, hi): return max(lo, min(hi, x))
+
+class PID:
+    def __init__(s,kp,ki,kd,ilim=10):
+        s.kp,s.ki,s.kd,s.ilim=kp,ki,kd,ilim;s.i=0;s.pe=None
+    def __call__(s,e,dt):
+        s.i=clamp(s.i+s.ki*e*dt,-s.ilim,s.ilim)
+        d=0 if s.pe is None else (e-s.pe)/dt
+        s.pe=e
+        return s.kp*e+s.i+s.kd*d
+
+# 电机模型: 一阶 dy/dt = (u - B*y - disturbance)/J
+J, B = 0.02, 0.3
+
+def run(cascade=True, T=4.0):
+    dt = 0.001
+    inner = PID(kp=2.0, ki=30, kd=0)      # 速度环
+    outer = PID(kp=40, ki=0, kd=0.5)      # 位置环
+    single = PID(kp=180, ki=200, kd=8)    # 单环(调到同等上升时间)
+    y = dy = 0.0
+    tgt = 1.0
+    log = []
+    for step in range(int(T/dt)):
+        t = step*dt
+        disturb = 3.0 if t > 2.0 else 0.0  # t=2s 负载扰动
+        if cascade:
+            if step % 10 == 0:              # 外环 100Hz
+                vel_cmd = outer(tgt - y, dt*10)
+                vel_cmd = clamp(vel_cmd, -8, 8)
+            u = inner(vel_cmd - dy, dt)     # 内环 1kHz
+        else:
+            u = single(tgt - y, dt)
+        ddy = (u - B*dy - disturb)/J
+        dy += ddy*dt; y += dy*dt
+        log.append((t, y))
+    return np.array(log)
+
+for name, cas in [("串级", True), ("单环", False)]:
+    log = run(cas)
+    settle = log[np.abs(log[:,1]-1)<0.05][:,0]
+    print(f"{name}: 调节时间 {settle[0] if len(settle) else float('inf'):.2f}s"
+          f" | 扰动后稳态误差 {abs(log[-1,1]-1):.3f}")
+# 串级: 扰动被内环1ms压制,位置几乎不动
+# 单环: 扰动直接打进位置,肉眼可见掉一下`) 
+        }),
+      ]},
+    ]},
+
+    { id: "stage-cva-2", title: "第二阶段 · 高级武器", chapters: [
+      { id: "cva-lqr", title: "第 5 章 LQR：让数学帮你调参", blocks: [
+        H.sub("最优控制的直觉"),
+        H.p("LQR（线性二次型调节器）的思想特别朴素：<b>你告诉数学「状态误差多痛、控制量多贵」，它算出最优增益</b>。不用再一个参数一个参数试——一次解 Riccati 方程，全出来。"),
+        H.code("python", "lqr.py", `import numpy as np
+from scipy.linalg import solve_continuous_are
+
+# 云台状态: x = [角度误差, 角速度]
+A = np.array([[0, 1],
+              [0, -B/J]])            # 云台动力学
+Bm = np.array([[0],
+               [1/J]])
+
+# 权重: Q=状态误差多痛, R=控制量多贵
+Q = np.diag([100.0,   # 角度误差权重(大=优先消除角度误差)
+             1.0])    # 速度误差权重
+R = np.array([[0.5]])  # 控制量权重(大=省力但慢)
+
+# 解 Riccati 方程 → 最优增益
+P = solve_continuous_are(A, Bm, Q, R)
+K = np.linalg.inv(R) @ Bm.T @ P
+print("LQR 增益 K =", K)
+# u = -K @ x  就是「最优」的全状态反馈
+# 调参=调 Q/R 比例,物理意义清晰:
+#   想更快 → Q[0,0]×10
+#   想省电/防饱和 → R×10`),
+        H.note("master", "什么时候值得上 LQR", "①多输入多输出耦合（俯仰+偏航+底盘）——PID 解耦调到吐血，LQR 一次解出 ②强约束优化（控制量有硬限制）→ MPC ③状态全可观测（陀螺仪+编码器齐）。单轴云台 PID+前馈完全够——<b>别为了炫技上 LQR，调试成本会吃掉你</b>。"),
+        H.quiz({
+          q: "LQR 里把 R（控制代价）调大，系统会？",
+          tag: "随堂测",
+          opts: ["响应更快", "响应变慢变柔和（省控制量）", "不稳定", "没有变化"],
+          ans: 1,
+          explain: "R 大 = 控制量「贵」，最优解倾向于少用力——响应平缓、电机电流小。反过来 R 小允许大力出奇迹，响应快但费电且容易饱和。Q/R 的比值就是「性能 vs 成本」的旋钮。"
+        }),
+        H.prac({
+          id: "cva-p5", level: 3, featured: true, title: "手写：LQR vs PID 对比",
+          body: "同一个云台模型：①PID 调到较好性能 ②LQR 解增益。对比阶跃响应的调节时间和控制量峰值，再扰动测试。写完整仿真。",
+          hint: "PID 和 LQR 用同一被控对象；LQR 需要全状态（角度+速度都可得）。",
+          solution: H.code("python", "vs.py", `import numpy as np
+from scipy.linalg import solve_continuous_are
+
+J, B = 0.02, 0.3
+A = np.array([[0,1],[0,-B/J]]); Bm = np.array([[0],[1/J]])
+
+# --- LQR ---
+Q = np.diag([200, 2]); R = np.array([[0.3]])
+P = solve_continuous_are(A, Bm, Q, R)
+K = (np.linalg.inv(R)@Bm.T@P).flatten()
+
+def sim_lqr(T=3.0):
+    x = np.array([1.0, 0.0]); dt=0.001; log=[]
+    for i in range(int(T/dt)):
+        u = -K @ x
+        dx = A@x + Bm.flatten()*u
+        x = x + dx*dt
+        log.append((i*dt, x[0], u))
+    return np.array(log)
+
+def sim_pid(kp=200, ki=250, kd=12, T=3.0):
+    x1, x2 = 1.0, 0.0; integ=0; pe=None; dt=0.001; log=[]
+    for i in range(int(T/dt)):
+        e = x1
+        integ = np.clip(integ+ki*e*dt, -8, 8)
+        d = 0 if pe is None else (e-pe)/dt; pe = e
+        u = kp*e + integ + kd*d
+        dx1 = x2
+        dx2 = (u - B*x2)/J
+        x1 += dx1*dt; x2 += dx2*dt
+        log.append((i*dt, x1, u))
+    return np.array(log)
+
+for name, log in [("LQR", sim_lqr()), ("PID", sim_pid())]:
+    settle = log[np.abs(log[:,1])<0.05][:,0]
+    print(f"{name}: 调节 {settle[0] if len(settle) else -1:.2f}s"
+          f" | 峰值控制量 {np.abs(log[:,2]).max():.1f}")
+# LQR 通常调节更短+控制量更平滑——因为它是全局最优的`) 
+        }),
+      ]},
+      { id: "cva-imu", title: "第 6 章 IMU 融合与时间同步", blocks: [
+        H.sub("陀螺仪是云台的灵魂传感器"),
+        H.p("云台内环跑在陀螺仪上——它的噪声和漂移直接决定控制品质。这一章讲透：陀螺仪怎么标定、怎么和视觉时间对齐。"),
+        H.table("IMU 三大误差", ["误差", "表现", "对策"], [
+          ["零偏 bias", "静止时读数非零且随温度漂", "上电静置标定 + 温度补偿"],
+          ["随机游走", "积分后角度缓慢漂移", "视觉/编码器定期修正"],
+          ["噪声", "微分放大震颤", "硬件低通 + 适度 KF 滤波"]
+        ]),
+        H.code("text", "时间同步三方案", `①硬件触发(最优):
+  工业相机触发线接IMU
+  同一脉冲时刻=同一数据时刻
+  精度: <0.1ms
+
+②软件时间戳+估偏移:
+  各自打时间戳(同一时钟源)
+  在线估计固定偏移并补偿
+  精度: 0.5~2ms
+
+③运动对齐法(无硬件时):
+  云台做已知正弦运动
+  视觉测的角速度 vs IMU测的角速度
+  互相关求峰值偏移 = 时间差
+  精度: 1~5ms(够用)
+
+RM 最低要求: ±2ms
+超过5ms: 视觉和IMU数据互相"打架"
+滤波器输出锯齿状跳变`),
+        H.note("master", "师父压箱底：静置标定 SOP", "开机静置 3 秒：采 3000 个样本取均值 = 当前零偏（存起来每帧减掉）。**比赛中每隔death回合重新静置标一次**——温度变化会让零偏漂 0.5°/h。这 3 秒换来的精度，值。"),
+        H.prac({
+          id: "cva-p6", level: 3, featured: true, title: "手写：互补滤波融合视觉+IMU",
+          body: "视觉 60Hz 更新角度（有噪声无漂移），IMU 1kHz 更新角速度（有漂移无累积延迟）。写互补滤波融合：高频信 IMU、低频信视觉。",
+          hint: "angle = α×(angle+gyro×dt) + (1-α)×vision_angle，α≈0.98。",
+          solution: H.code("python", "cf.py", `import numpy as np
+
+class ComplementaryFilter:
+    def __init__(s, alpha=0.98):
+        s.alpha = alpha
+        s.angle = None
+    def update(s, dt, gyro_z, vision_angle=None):
+        # 高频: 陀螺仪积分(快但漂)
+        if s.angle is None:
+            s.angle = vision_angle if vision_angle is not None else 0.0
+        s.angle += gyro_z * dt
+        # 低频: 视觉观测(慢但准)拉回漂移
+        if vision_angle is not None:
+            s.angle = s.alpha*s.angle + (1-s.alpha)*vision_angle
+        return s.angle
+
+# 模拟: 真值 30s 转 90°
+dt = 0.001; T = 30.0
+steps = int(T/dt)
+cf = ComplementaryFilter(0.98)
+true_a = np.zeros(steps)
+for i in range(steps):
+    true_a[i] = 90.0 * min(i*dt/T, 1.0)
+
+gyro = np.gradient(true_a)/dt + 0.02 + np.random.normal(0, 0.05, steps)  # 零偏+噪声
+vision = true_a + np.random.normal(0, 0.5, steps)                        # 视觉噪声
+vision[::60] = vision[::60]                                              # 60Hz更新
+
+out = np.zeros(steps)
+for i in range(steps):
+    v = vision[i] if i % 60 == 0 else None
+    out[i] = cf.update(dt, gyro[i], v)
+print(f"纯IMU漂移: {abs(np.gradient(true_a).mean()*0 - 0.02*T):.2f}°")
+print(f"融合误差: {abs(out[-1]-true_a[-1]):.3f}°") 
+# 互补滤波: 误差<0.5°,纯IMU早漂没了`) 
+        }),
+      ]},
+      { id: "cva-ballistic", title: "第 7 章 弹道解算工程化", blocks: [
+        H.sub("从物理到代码"),
+        H.p("教科书给抛体公式，实战要处理：<b>空气阻力、弹速衰减、重力+哥氏、机械零偏</b>。RM 弹速 15~30m/s、距离 2~8m，模型选不对，差 20cm。"),
+        H.code("python", "ballistic.py", `import numpy as np
+
+# ---- 无阻力抛体(RM 近距离够用) ----
+# 给定水平距离 d 和弹速 v,求仰角
+def solve_pitch(d, v=25.0, g=9.8):
+    # 精确解: tan(θ) 的二次方程
+    # d = v·cosθ·t; -Δh = v·sinθ·t - g·t²/2
+    ratio = g*d / (v*v)
+    # 低弹道解(实战用,飞行时间短)
+    tan = ratio / (1 + np.sqrt(1 + ratio*ratio))  # 简化近似
+    # 更准: 数值迭代
+    theta = np.arctan(tan)
+    for _ in range(5):                     # 牛顿迭代精化
+        t = d / (v*np.cos(theta))
+        h = v*np.sin(theta)*t - 0.5*g*t*t
+        err = 0 - h                        # 目标等高
+        derr = (v*np.cos(theta) - 0 + v*np.sin(theta)*d/(v*np.cos(theta)**2)*(-np.sin(theta)))
+        theta -= err / max(derr, 1e-6)
+    return np.degrees(theta)
+
+for dist in [2, 4, 6, 8]:
+    print(f"{dist}m: 仰角 {solve_pitch(dist):.2f}°")
+# 6m/25m/s ≈ 1.7° —— 手感上"基本平射"但要精确补`),
+        H.note("master", "弹速标定的铁律", "摩擦轮弹速不是设定值——<b>是衰减曲线</b>：连续射击气压下降、弹速掉 5~10%。实战：①弹速测速器实测 20 发取均值 ②打连发前预转摩擦轮 2 秒 ③每 50 发后弹速重标（或电控做射速自适应补偿）。不标定的弹道模型就是自欺欺人。"),
+        H.quiz({
+          q: "实测 20 发弹速：24.8/25.1/24.9/25.0/23.2/...，其中 23.2 这个离群值该？",
+          tag: "随堂测",
+          opts: ["直接平均进去", "剔除后平均（可能是卡弹/未充分加速）", "取最小值保底", "取最大值"],
+          ans: 1,
+          explain: "离群值通常是异常射击（弹未入位/摩擦轮抖动），不代表正常弹道。剔除后平均才是有效弹速。但离群率 >10% 说明摩擦轮系统有问题，要修机械而不是修数据。"
+        }),
+        H.prac({
+          id: "cva-p7", level: 3, featured: true, title: "手写：带空气阻力的弹道迭代",
+          body: "弹速 25m/s，阻力系数 k=0.01（F=-k·v²·v̂），目标距离 6m 等高。用数值积分（RK4 或欧拉 dt=0.1ms）求仰角，对比无阻力解差多少。",
+          hint: "固定距离反解角度：先猜角度→积分弹道→看落点偏差→牛顿迭代修正角度。",
+          solution: H.code("python", "drag.py", `import numpy as np
+
+K, G, V = 0.01, 9.8, 25.0
+
+def fly(angle_deg, d_target=6.0, dt=0.0001):
+    th = np.radians(angle_deg)
+    x, y, vx, vy = 0.0, 0.0, V*np.cos(th), V*np.sin(th)
+    while x < d_target and y > -0.5:
+        v = np.hypot(vx, vy)
+        ax = -K*v*vx; ay = -G - K*v*vy
+        vx += ax*dt; vy += ay*dt
+        x += vx*dt;  y += vy*dt
+    return y                        # 落点高度(目标=0)
+
+def solve(d=6.0):
+    th = 2.0                        # 初值:无阻力近似解
+    for _ in range(12):             # 二分/割线法
+        h = fly(th, d)
+        if abs(h) < 1e-4: break
+        h2 = fly(th + 0.01, d)
+        slope = (h2 - h) / 0.01
+        th -= h / slope
+    return th
+
+angle = solve()
+print(f"带阻力解: {angle:.3f}°")
+print(f"无阻力解: {2*np.degrees(np.arctan(9.8*6/625/(1+np.sqrt(1+(9.8*6/625)**2)))):.3f}°")
+print(f"差值: {abs(angle-2*np.degrees(np.arctan(9.8*6/625/(1+np.sqrt(1+(9.8*6/625)**2))))):.3f}° = 6m处 {np.sin(np.radians(abs(angle-2)))*6*100:.1f}cm")
+# 阻力使所需仰角更大,6m差约0.1~0.3°≈1~3cm——8m外不可忽略`) 
+        }),
+      ]},
+      { id: "cva-protect", title: "第 8 章 安全与保护策略", blocks: [
+        H.sub("失控的机器人是凶器"),
+        H.p("50 弹丸秒的发射器 + 3kW 电机——安全不是选择题。保护分三层：<b>控制层限幅、监测层熔断、硬件层兜底</b>。"),
+        H.code("text", "三层保护架构", `控制层(每周期):
+  电流限幅: |I| < Imax(电机规格×0.8)
+  速度限幅: |ω| < ωmax(机械安全转速)
+  加速度限幅: 防冲击载荷(齿轮崩齿)
+  角度软限位: 接近机械限位自动减速
+
+监测层(10Hz):
+  电机温度 > 80°C → 降功率 50%
+  电池电压 < 20V  → 禁用大功率功能
+  控制误差 > 阈值持续 500ms → 姿态异常 → 切安全模式
+  陀螺仪饱和(摔车) → 全输出归零
+
+硬件层(最后一道):
+  硬限位开关: 超程物理断电
+  大电流保险丝: 短路熔断
+  裁判系统急停: 任何时刻生效
+  遥控器失联 500ms → 独立接收机直接断电(不过主控)`),
+        H.note("master", "师父最狠的一条规矩", "<b>任何控制代码 merge 前必须回答：这个 bug 最坏会让机器人做什么？</b>答不上来不许合。我见过云台电机堵转烧了 800 块、见过失控机器人撞裁判台直接取消资格——都是「就差一个 if」的事。"),
+        H.prac({
+          id: "cva-p8", level: 3, title: "手写：安全监控状态机",
+          body: "写安全监控模块：输入电机温度/电压/误差/IMU 状态，输出 NORMAL/DERATE(降功率)/SAFE(安全模式)三态，状态切换带迟滞（防抖动）。",
+          hint: "迟滞: 进入 DERATE 在 75°C,恢复在 70°C——防止在阈值附近反复横跳。",
+          solution: H.code("cpp", "safety.cpp", `enum class State { NORMAL, DERATE, SAFE };
+
+class SafetyMonitor {
+    // 迟滞阈值
+    static constexpr float TEMP_DERATE_ON  = 75.0f;
+    static constexpr float TEMP_DERATE_OFF = 70.0f;
+    static constexpr float TEMP_SAFE       = 95.0f;
+    static constexpr float VOLT_MIN        = 20.0f;
+    static constexpr float ERR_MAX_MS      = 500.0f;   // 误差超限时长
+
+    State state = State::NORMAL;
+    float err_over_ms = 0.0f;
+
+public:
+    // 10Hz 调用
+    State update(float temp, float volt, float ctrl_err, bool imu_saturated) {
+        // ---- 熔断条件(任一立即进 SAFE) ----
+        if (temp > TEMP_SAFE || volt < VOLT_MIN || imu_saturated) {
+            state = State::SAFE;
+            return state;
+        }
+        // ---- 误差超限计时 ----
+        if (ctrl_err > 0.5f) err_over_ms += 100.0f;
+        else                 err_over_ms = 0.0f;
+        if (err_over_ms > ERR_MAX_MS) state = State::SAFE;
+
+        // ---- 降功率(带迟滞) ----
+        if (state == State::NORMAL && temp > TEMP_DERATE_ON)
+            state = State::DERATE;
+        else if (state == State::DERATE && temp < TEMP_DERATE_OFF)
+            state = State::NORMAL;   // 恢复也要迟滞
+
+        return state;
+    }
+
+    float power_scale() const {
+        switch (state) {
+            case State::NORMAL: return 1.0f;
+            case State::DERATE: return 0.5f;
+            case State::SAFE:   return 0.0f;
+        }
+        return 0.0f;
+    }
+};`) 
+        }),
+      ]},
+      { id: "cva-tuning", title: "第 9 章 调参 SOP：从玄学到流程", blocks: [
+        H.sub("师父的调参七步法"),
+        H.p("调参不是艺术是流程。照这个顺序走，新人也能两小时收敛："),
+        H.ol([
+          "<b>先内环后外环</b>：速度环阶跃调到快无超调 → 才动位置环",
+          "<b>P 起步</b>：P 从小加大到「轻微震荡」，退回 60%",
+          "<b>D 压震荡</b>：震荡加 D 压到平，D 太大出现高频颤 → 退",
+          "<b>I 消静差</b>：加 I 直到静差消失，超调明显就退",
+          "<b>前馈补已知</b>：跟踪滞后大 → 上速度前馈",
+          "<b>实测验证</b>：阶跃/正弦/扰动三套测试都要过",
+          "<b>参数记录</b>：当前组+性能指标存档（下赛季的起点）"
+        ]),
+        H.code("text", "验收指标模板", `阶跃测试(10°阶跃):
+  上升时间 < 80ms
+  超调     < 5%
+  调节时间 < 300ms
+  稳态误差 < 0.05°
+
+正弦跟踪(2Hz, ±20°):
+  幅值误差 < 3%
+  相位滞后 < 8°
+
+抗扰(突然加 0.5N·m 负载):
+  最大偏移 < 0.8°
+  恢复时间 < 200ms
+
+三套全过才算"调完了"
+只过阶跃=能看不能用`),
+        H.prac({
+          id: "cva-p9", level: 2, featured: true, title: "手写：调参记录表",
+          body: "设计调参数据记录表（Markdown）：参数组/测试条件/三项指标结果/现象备注/结论。用它记录一次完整调参过程（模拟数据），让三个月后的你能看懂当时为什么这么调。",
+          hint: "表格+现象描述比数字更重要。",
+          solution: H.code("text", "tuning_log.md", `# 云台调参记录 2026-10-02
+
+## 环境
+枪管: 新38mm, 弹速标定 25.2m/s
+供电: 满电 25.1V
+
+| 组 | kp | ki | kd | 上升 | 超调 | 备注 |
+|----|-----|-----|-----|------|------|------|
+| 1 | 80 | 0 | 0 | 220ms | 0% | 太肉,上不去 |
+| 2 | 160 | 0 | 0 | 110ms | 0% | 还能加 |
+| 3 | 240 | 0 | 0 | 70ms | 12% | 震荡了,回退 |
+| 4 | 200 | 0 | 0 | 85ms | 3% | **P锁定 200** |
+| 5 | 200 | 0 | 4 | 85ms | 1% | D压住残余震荡 |
+| 6 | 200 | 0 | 8 | 85ms | 1% | 高频颤(D过大),D回4 |
+| 7 | 200 | 60 | 4 | 82ms | 4% | I消静差,轻微超调可接受 |
+
+## 最终: kp=200 ki=60 kd=4 + 速度前馈0.9
+## 遗留: 满弹匣比空弹匣响应慢5%(重量变化)
+        → 下次实验: 前馈按弹匣重量分档`) 
+        }),
+      ]},
+      { id: "cva-summary", title: "第 10 章 结课：控制的品味", blocks: [
+        H.sub("十年工程师的三句话"),
+        H.p("第一句：<b>能不用复杂方法就不用</b>——PID+前馈解决 90%，LQR/MPC 是给剩下 10% 的。方案复杂度和维护成本成正比，比赛现场没时间伺候复杂系统。"),
+        H.p("第二句：<b>每个参数都要有物理意义</b>——「这个 kd=4 为什么是 4」你能答出来（压震荡，大了高频颤）。答不出的参数是定时炸弹，换个人调就崩。"),
+        H.p("第三句：<b>控制的天花板在传感器和机械</b>——编码器 12bit 调不出 16bit 的精度，齿轮间隙 0.5° 再好的算法也补不平。软件压不动了，先看硬件还有没有油水。"),
+        H.note("master", "结课礼", "徒弟，这门课教完，你具备了从「参数搬运工」到「系统设计者」的全部理论。剩下的 90% 在赛场上的失败里——每次炸机、每次脱靶、每次被血虐，都是这堂课的续集。<b>去输，输完回来查错题本。</b>"),
+        H.prac({
+          id: "cva-p10", level: 3, featured: true, title: "毕业考：控制方案设计书",
+          body: "新云台设计任务：双 42mm 枪管（J 比 38mm 大 40%）、目标跟踪带宽 5Hz、弹速 18m/s。写控制方案设计书：架构选型/传感器配置/参数预估/验证计划/风险清单。",
+          hint: "架构沿用串级+前馈；J变大→带宽重新算；弹速低→弹道补偿更大。",
+          solution: H.code("text", "design.txt", `RM 云台控制方案设计书(42mm双管)
+
+一、需求分析
+  负载: J=0.028 kg·m²(比38单管+40%)
+  跟踪带宽: ≥5Hz(小陀螺1.6r/s=2.5Hz,留一倍)
+  弹速: 18m/s → 6m飞行0.33s,下坠54cm(必须精补)
+
+二、架构
+  串级PID+双前馈(速度+重力矩)
+  外环位置100Hz / 内环速度1kHz
+  LQR评估过: 单轴耦合弱,PID够,不引入复杂度
+
+三、传感器
+  编码器17bit(0.003°) —— J大后精度要求不降
+  IMU 1kHz 低噪版 —— 内环数据源
+  弹速测速器 —— 18m/s下落点对弹速敏感度翻倍
+
+四、关键参数预估
+  内环: kp≈2.5(按J折算),带宽≥60Hz
+  外环: kp≈35起,目标调节<120ms(J大放宽)
+  重力前馈: 双管不平衡力矩实测后查表
+  弹道: 18m/s时6m仰角≈3.1°(vs25m/s的1.7°)
+    → 仰角分辨率要求提高到0.05°
+
+五、验证计划
+  阶跃/正弦/扰动三件套 + 连发100发弹速衰减曲线
+  满弹匣vs空弹匣对比(重量J变化)
+
+六、风险
+  ①J大导致内环带宽吃紧 → 电机换大一档或减速比调整
+  ②双管不对称力矩 → 静平衡配重先行
+  ③弹速衰减大 → 摩擦轮压力重新标定+射速自适应`) 
+        }),
+      ]},
+    ]},
+  ]
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>使用说明书 · RM 兵工厂</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/premium.css">
+<style>
+  .help-toc {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; margin: 18px 0 26px;
+  }
+  .help-toc h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 10px; letter-spacing: 1px; }
+  .help-toc ol { margin-left: 20px; }
+  .help-toc li { margin: 4px 0; font-size: 14.5px; }
+  .help-toc a { color: var(--accent); }
+  .steps { counter-reset: step; margin: 14px 0; }
+  .step { display: flex; gap: 14px; margin: 18px 0; align-items: flex-start; }
+  .step-num {
+    counter-increment: step; flex: none;
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: #fff; font-weight: 800; display: grid; place-items: center; font-size: 16px;
+    box-shadow: 0 3px 12px rgba(31,111,235,.35);
+  }
+  .step-num::before { content: counter(step); }
+  .step-body { flex: 1; padding-top: 4px; }
+  .step-body b { color: var(--text); }
+  .kbd {
+    display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12.5px;
+    background: var(--bg-code); border: 1px solid var(--border); border-bottom-width: 2px;
+    color: var(--text); font-family: var(--mono);
+  }
+  .faq-item { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin: 10px 0; background: var(--bg-card); }
+  .faq-item .q { font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .faq-item .a { color: var(--text-dim); font-size: 14.5px; }
+</style>
+</head>
+<body data-page="help">
+<div class="layout"><main class="content">
+
+  <div class="crumb">RM 兵工厂 / 使用说明书</div>
+  <h1 style="font-size:30px;font-weight:800;">使用说明书 <span class="lang-badge">v1.1</span></h1>
+  <p class="dim">给徒弟的操作手册。十分钟读完，少走弯路。</p>
+
+  <div class="help-toc">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#what">这是什么</a></li>
+      <li><a href="#install">安装与启动</a></li>
+      <li><a href="#learn">怎么学（课程篇）</a></li>
+      <li><a href="#practice">怎么练（练习篇）</a></li>
+      <li><a href="#progress">进度与数据</a></li>
+      <li><a href="#shortcuts">快捷键</a></li>
+      <li><a href="#faq"><h3 id="wrongbook">七、错题本 / 打卡 / 数据备份</h3>
+  <div class="faq-item">
+    <div class="q">📕 错题本怎么用？</div>
+    <p><b>自动</b>：随堂测答错立刻进错题本。<b>手动</b>：手写题没过关，题卡上点「加入错题本」。
+    顶栏「错题」按钮随时打开，红数字 = 未消灭数。看解析 → 搞懂 → 点「已消灭」。错题是第二本教材，别怕攒，怕的是不看。</p>
+  </div>
+  <div class="faq-item">
+    <div class="q">🔥 连续打卡怎么算？</div>
+    <p>每天标记任意一题「已练会」= 当天打卡。练习中心顶部有 14 天打卡日历，橙色 = 有练题。
+    今天还没练不会打断昨天的连续记录（天数从昨天接着算），但你想涨天数就得今天练。</p>
+  </div>
+  <div class="faq-item">
+    <div class="q">💾 数据怎么备份？换电脑怎么迁移？</div>
+    <p>顶栏「数据」→「导出备份文件」生成 .json。新电脑上打开应用 →「数据」→「从备份恢复」→ 选中文件。
+    包含全部进度、错题本、测验战绩。建议每周导出一次。</p>
+  </div>
+  <div class="faq-item">
+    <div class="q">📝 随堂测战绩在哪看？</div>
+    <p>练习中心顶部「随堂测战绩」面板：累计答题、正确率进度条。哪门课概念虚，一眼看穿。</p>
+  </div>
+
+常见问题</a></li>
+    </ol>
+  </div>
+
+  <h3 class="sub" id="what">一、这是什么</h3>
+  <p>「RM 兵工厂」是一套<b>离线可用</b>的嵌入式 + 机器视觉训练系统，覆盖十门课：</p>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>课程</th><th>定位</th><th>题量</th><th>精选</th></tr></thead>
+    <tbody>
+      <tr><td>C 语言</td><td>硬件母语，指针重火力补课</td><td>154</td><td>16</td></tr>
+      <tr><td>C++</td><td>C 的增量升级：引用/类/RAII/模板</td><td>129</td><td>15</td></tr>
+      <tr><td>Python</td><td>快速侦察兵，NumPy 向量化思维</td><td>126</td><td>18</td></tr>
+      <tr><td>Linux</td><td>命令行到部署：三剑客/Shell/git/cmake/gdb/ssh</td><td>120</td><td>27</td></tr>
+      <tr><td>ROS 2</td><td>机器人通信骨架，视觉组主战场</td><td>120</td><td>25</td></tr>
+      <tr><td>RM 电控</td><td>FreeRTOS / CAN / 电机 / PID / 安全</td><td>120</td><td>31</td></tr>
+      <tr><td>RM 视觉</td><td>OpenCV 流水线 / PnP / EKF / 弹道</td><td>120</td><td>38</td></tr>
+      <tr><td>OpenCV</td><td>像素到装甲板：二值化/轮廓/标定/透视</td><td>10</td><td>120</td></tr>
+      <tr><td>YOLO</td><td>深度学习：数据/训练/TensorRT/跟踪/大符</td><td>10</td><td>120</td></tr>
+      <tr><td>控制进阶</td><td>前馈/串级/LQR/IMU融合/弹道/安全</td><td>10</td><td>120</td></tr>
+    </tbody>
+  </table></div>
+  <p class="dim">总计 <b>1379 道手写题</b>，每题都有提示和参考答案。程序是单文件绿色版，不联网、不安装、不留垃圾，数据存在本机浏览器存储里。</p>
+
+  <h3 class="sub" id="install">二、安装与启动</h3>
+  <div class="steps">
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>下载</b>：拿到 <code class="inline">RM兵工厂.exe</code>（或文件夹版 zip），放到任意目录。建议放在桌面或 D 盘，路径别带太多层。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>启动</b>：双击 <code class="inline">RM兵工厂.exe</code>。首次启动要 2~5 秒加载题库，看到 🦐 图标和「RM 兵工厂」首页即成功。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>桌面快捷方式</b>：右键 exe →「发送到」→「桌面快捷方式」，以后一键开。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>卸载</b>：直接删文件夹即可，不写注册表。学习进度存在 <code class="inline">%APPDATA%\RM兵工厂</code>（或用户数据目录），删掉即彻底清干净。
+    </div></div>
+  </div>
+
+  <h3 class="sub" id="learn">三、怎么学（课程篇）</h3>
+  <ul class="list">
+    <li><b>按顺序走</b>：首页有师父排的 25 周学习路线，C → C++ → Python → Linux → ROS 2 → 电控/视觉双线。别跳，前面的章节是后面的地基。</li>
+    <li><b>左侧目录</b>：每门课左侧是章节目录，点章节名跳转。章节标题旁的方框 <code class="inline">☐</code> 点一下 = 标记这章学完，目录里会打勾划线。</li>
+    <li><b>代码必须手敲</b>：教程里的代码块右上角有「复制」按钮——那是给你对照用的，不是让你粘贴的。先自己敲，卡住了再看。</li>
+    <li><b>随堂测</b>：章节里的选择题，点了立刻出对错和解析。答错不扣分，但要搞懂为什么错。</li>
+    <li><b>昼夜主题</b>：右上角 ☀️/🌙 按钮切换深色/浅色主题，眼睛舒服才学得久。</li>
+  </ul>
+
+  <h3 class="sub" id="practice">四、怎么练（练习篇）</h3>
+  <div class="steps">
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>流程</b>：看题 → 纸上/IDE 里自己写 → 点「我写完了，看参考」对答案 → 差距大的话第二天重写一遍 → 点「标记已练会」。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>精选好题 ★</b>：练习中心打开时，顶部就是「师父精选好题」区，带金色高亮和 ★ 标。一个模块 15+ 道，时间紧就先刷这批。也可以用筛选器「只看精选」。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>筛选与搜索</b>：顶部工具栏可以按语言、难度（入门/进阶/实战）筛选，支持关键词搜索。列表太长会自动分页加载，往下滚就好。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>随机抽题 🎲</b>：点击「随机抽题」，从 1379 题里随机抽一道并自动滚过去。适合每天的热身。
+    </div></div>
+    <div class="step"><div class="step-num"></div><div class="step-body">
+      <b>打印卷子 🖨</b>：筛选出想练的题（比如「C 语言 + 入门」），点「打印卷子」，浏览器打印成纸质卷。师父说过：纸上写出来的才是真功夫。
+    </div></div>
+  </div>
+
+  <h3 class="sub" id="progress">五、进度与数据</h3>
+  <ul class="list">
+    <li><b>进度存在哪</b>：全部存在本机，不上传、不联网。清浏览器数据 / 重装系统前想保留进度，用「导出进度」功能（首页右上角菜单）。</li>
+    <li><b>统计面板</b>：练习中心顶部五个数字——总题数、已练会、完成度、精选已练、今日练会。「今日练会」是你每天的打卡数，别让它归零。</li>
+    <li><b>练会标准</b>：不是「看懂了」就算，是<b>不看答案能写出参考答案水平的代码</b>。自欺欺人的勾不如不打。</li>
+  </ul>
+
+  <h3 class="sub" id="shortcuts">六、快捷键</h3>
+  <div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>按键</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td><span class="kbd">Ctrl</span> + <span class="kbd">P</span></td><td>打印当前页面（打印卷子）</td></tr>
+      <tr><td><span class="kbd">Ctrl</span> + <span class="kbd">R</span></td><td>刷新（一般用不着）</td></tr>
+      <tr><td><span class="kbd">Alt</span> + <span class="kbd">←</span></td><td>返回上一页</td></tr>
+      <tr><td><span class="kbd">Alt</span> + <span class="kbd">→</span></td><td>前进下一页</td></tr>
+      <tr><td><span class="kbd">Ctrl</span> + <span class="kbd">=</span> / <span class="kbd">-</span> / <span class="kbd">0</span></td><td>放大 / 缩小 / 重置缩放</td></tr>
+      <tr><td><span class="kbd">F12</span></td><td>开发者工具（调试用，平时别开）</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 class="sub" id="faq">七、常见问题</h3>
+  <div class="faq-item"><div class="q">Q1：双击 exe 没反应 / 被 Windows 拦截？</div>
+  <div class="a">SmartScreen 会拦未签名的程序。点「更多信息」→「仍要运行」。若杀毒软件误报，加白名单即可——本程序纯本地静态站，不联网不收集任何数据。</div></div>
+  <div class="faq-item"><div class="q">Q2：进度丢了？</div>
+  <div class="a">检查是不是换了浏览器或清了浏览器数据（网页版）。桌面版进度存在固定目录，除非手动删，否则不会丢。养成用导出备份的习惯。</div></div>
+  <div class="faq-item"><div class="q">Q3：能联网用吗？手机能开吗？</div>
+  <div class="a">全站离线可用，不需要网络。网页版（双击 index.html）在手机浏览器也能开，但推荐大屏练题。</div></div>
+  <div class="faq-item"><div class="q">Q4：随机抽题抽到学过的怎么办？</div>
+  <div class="a">再点一次就是了。重复抽到旧题不亏——复练本身就是记忆曲线的一部分。</div></div>
+  <div class="faq-item"><div class="q">Q5：打印出来的卷子没带答案？</div>
+  <div class="a">打印样式默认隐藏答案区，只出题面。需要答案版：先展开答案再打印。</div></div>
+
+  <div class="note master">
+    <div class="note-title">师父的话</div>
+    <p>说明书看到这儿就够了，剩下的靠你的手指。记住：这个程序只是弹药库，枪要你自己开。每天定量：入门 5 道 + 进阶 3 道 + 精选 1 道，二十五周后回来谢我。</p>
+  </div>
+
+  <div class="next-chapter">
+    <a class="btn" href="index.html">← 返回首页</a>
+    <a class="btn primary" href="practice.html">去练习中心 →</a>
+  </div>
+
+  <footer class="site-footer">RM 兵工厂 · 使用说明书 v1.1 —— 纸上得来终觉浅，绝知此事要躬行。</footer>
+
+</main></div>
+
+<script src="assets/js/highlight.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
