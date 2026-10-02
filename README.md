@@ -20,7 +20,7 @@
 
 **方式二：便携版 exe（可选）**
 
-`release/RM兵工厂-Portable.exe` 双击即用，免安装、免联网。该 exe 体积较大，未随仓库提交，需自行构建或从 Release 页获取。
+到 [Releases](https://github.com/Mae-run/rm-academy/releases/latest) 下载 `RM-Arsenal-Portable.exe`（约 71 MB，Windows 64 位），双击即用，免安装、免联网。
 
 ---
 
