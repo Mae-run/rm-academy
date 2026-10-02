@@ -480,6 +480,13 @@ table.tbl tr:hover td { background: rgba(63,155,255,.04); }
   border-top: 1px solid var(--border); margin-top: 60px; padding: 26px 0;
   color: var(--text-faint); font-size: 13px; text-align: center;
 }
+.footer-gh {
+  display: inline-block; margin-top: 8px; padding: 6px 14px;
+  border: 1px solid var(--border); border-radius: 6px;
+  color: var(--accent); text-decoration: none; font-weight: 600;
+  transition: border-color .15s, background .15s;
+}
+.footer-gh:hover { border-color: var(--accent); background: var(--bg-card); }
 
 /* ---------------- 杂项 ---------------- */
 .back-top {

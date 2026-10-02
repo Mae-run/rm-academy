@@ -293,6 +293,8 @@
 
     html += '<footer class="site-footer">RM 兵工厂 · 学员训练站 —— 师父退休前的最后一课。代码要自己敲，题要自己写，别偷懒。</footer>';
 
+    
+
     content.innerHTML = html;
 
     document.querySelector(".toc-toggle").addEventListener("click", function () {
@@ -476,6 +478,7 @@
     if (global.PAGE_ONLOAD) global.PAGE_ONLOAD();
     global.refreshAllPractices();
     wireBackTop();
+
 
     // 语法高亮
     document.querySelectorAll(".codeblock").forEach(function (cb) {
@@ -669,3 +672,27 @@ function renderBackup() {
 document.addEventListener("DOMContentLoaded", function () {
   refreshWrongBadge();
 });
+
+/* ---------- 页脚 GitHub 链接（全站统一，模块顶层） ---------- */
+(function (global) {
+  function addGh() {
+    document.querySelectorAll(".site-footer").forEach(function (f) {
+      if (f.querySelector(".footer-gh")) return;
+      var a = document.createElement("a");
+      a.className = "footer-gh";
+      a.href = "https://github.com/Mae-run/rm-academy";
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "⭐ GitHub · Mae-run/rm-academy —— 喜欢就给个 Star";
+      f.appendChild(document.createElement("br"));
+      f.appendChild(a);
+    });
+  }
+  global.__rmAddGhFooter = addGh;
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { setTimeout(addGh, 0); });
+  } else {
+    setTimeout(addGh, 0);
+  }
+  window.addEventListener("load", addGh);
+})(window);
