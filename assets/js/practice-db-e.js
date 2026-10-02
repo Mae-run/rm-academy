@@ -700,7 +700,7 @@
         "arr = np.random.rand(1000)",
         "print(arr.mean())     # 均值",
         "print(arr.var())      # 方差",
-        "print(arr.std())      # �standard deviation 标准差",
+        "print(arr.std())      # 标准差 standard deviation",
         "print(np.median(arr)) # 中位数",
         "print(np.percentile(arr, 75))  # 75百分位数"
       ].join("\n"))
