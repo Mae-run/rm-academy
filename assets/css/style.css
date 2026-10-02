@@ -579,11 +579,11 @@ table.tbl tr:hover td { background: rgba(63,155,255,.04); }
 .backup-note { font-size: 12.5px; color: var(--text-faint); margin-top: 10px; line-height: 1.7; }
 
 /* ============================================================
-   终末地 · 战术几何层（覆盖在配色之上）
+   战术科幻 · 战术几何层（覆盖在配色之上）
    斜切角 / 直角边框 / 军事标签 / HUD 装饰
    ============================================================ */
 
-/* 全站圆角归零——终末地几何语言 */
+/* 全站圆角归零——战术科幻几何语言 */
 .btn, .theme-btn, .top-btn, .card, .course-card, .stat-card, .prac-toolbar select,
 .prac-toolbar input, .note, .codeblock, .tbl, .pd-card, .drawer, .quiz,
 .practice, .proj-card, .lang-badge, .p-tag, input, select, textarea {
@@ -618,7 +618,7 @@ table.tbl tr:hover td { background: rgba(63,155,255,.04); }
   letter-spacing: 2px;
 }
 
-/* 徽章——终末地直角工业牌 */
+/* 徽章——战术科幻直角工业牌 */
 .lang-badge, .p-tag {
   clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
   border-radius: 0 !important;
@@ -659,10 +659,10 @@ table.tbl tr:hover td { background: rgba(63,155,255,.04); }
 }
 
 /* ============================================================
-   终末地 · HUD 细节层
+   战术科幻 · HUD 细节层
    ============================================================ */
 
-/* logo 方块 → 终末地斜切徽标 + 扫描线 */
+/* logo 方块 → 战术科幻斜切徽标 + 扫描线 */
 .topbar .logo .logo-icon {
   border-radius: 0 !important;
   clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
@@ -729,7 +729,7 @@ table.tbl tr:hover td { background: rgba(63,155,255,.04); }
   pointer-events: none;
 }
 
-/* 打印时保留终末地骨架 */
+/* 打印时保留战术科幻骨架 */
 @media print {
   .course-card, .proj-card, .card, .stat-card { clip-path: none; }
 }
